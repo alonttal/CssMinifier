@@ -152,7 +152,7 @@ public class CssMinifier {
         Pattern.CASE_INSENSITIVE);
 
     private static final Pattern ZERO_UNIT = Pattern.compile(
-        "(?<=[:\\s,(/])0(px|em|rem|pt|cm|mm|in|pc|ex|ch|vw|vh|vmin|vmax|deg|rad|turn|ms|s|%)(?![0-9a-zA-Z%])");
+        "(?<=[:\\s,(/])0(px|em|rem|pt|cm|mm|in|pc|ex|ch|vw|vh|vmin|vmax|deg|rad|turn|%)(?![0-9a-zA-Z%])");
 
     private static final Pattern LEADING_ZERO = Pattern.compile(
         "(?<=[:\\s,(/\\-])0(\\.\\d+)");
@@ -461,6 +461,12 @@ public class CssMinifier {
             || value.contains("-ms-") || value.contains("-o-");
     }
 
+    private static boolean hasModernCssFunction(String value) {
+        return value.contains("calc(") || value.contains("var(")
+            || value.contains("min(") || value.contains("max(")
+            || value.contains("clamp(") || value.contains("env(");
+    }
+
     private static String deduplicateBlock(String block) {
         if (block.isEmpty()) return block;
 
@@ -484,16 +490,16 @@ public class CssMinifier {
             java.util.List<Integer> indices = entry.getValue();
             if (indices.size() <= 1) continue;
 
-            boolean anyVendorPrefixed = false;
+            boolean isFallbackChain = false;
             for (int idx : indices) {
                 String value = declarations[idx].substring(declarations[idx].indexOf(':') + 1);
-                if (hasVendorPrefix(value)) {
-                    anyVendorPrefixed = true;
+                if (hasVendorPrefix(value) || hasModernCssFunction(value)) {
+                    isFallbackChain = true;
                     break;
                 }
             }
 
-            if (!anyVendorPrefixed) {
+            if (!isFallbackChain) {
                 // Safe to dedup: remove all but the last
                 for (int i = 0; i < indices.size() - 1; i++) {
                     toRemove.add(indices.get(i));

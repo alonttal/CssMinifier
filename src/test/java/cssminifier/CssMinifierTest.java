@@ -1413,14 +1413,16 @@ class CssMinifierTest {
         }
 
         @Test
-        void removesZeroMs() {
-            assertEquals("a{transition:all 0}",
+        void preservesZeroMs() {
+            // CSS spec requires time units even for zero values
+            assertEquals("a{transition:all 0ms}",
                 CssMinifier.minify("a { transition: all 0ms; }"));
         }
 
         @Test
-        void removesZeroS() {
-            assertEquals("a{transition:all 0}",
+        void preservesZeroS() {
+            // CSS spec requires time units even for zero values
+            assertEquals("a{transition:all 0s}",
                 CssMinifier.minify("a { transition: all 0s; }"));
         }
 
@@ -1504,6 +1506,37 @@ class CssMinifierTest {
         void removesZeroUnitAfterOpenParen() {
             assertEquals("a{transform:translate(0,0)}",
                 CssMinifier.minify("a { transform: translate(0px, 0px); }"));
+        }
+
+        @Test
+        void preservesZeroSecondInTransition() {
+            // CSS spec: time values require units even for zero
+            assertEquals("a{transition:visibility 0s .3s}",
+                CssMinifier.minify("a { transition: visibility 0s 0.3s; }"));
+        }
+
+        @Test
+        void preservesZeroMsInTransition() {
+            assertEquals("a{transition:all 0ms ease}",
+                CssMinifier.minify("a { transition: all 0ms ease; }"));
+        }
+
+        @Test
+        void preservesZeroSecondInAnimation() {
+            assertEquals("a{animation:fade 1s 0s forwards}",
+                CssMinifier.minify("a { animation: fade 1s 0s forwards; }"));
+        }
+
+        @Test
+        void preservesZeroSecondInAnimationDelay() {
+            assertEquals("a{animation-delay:0s}",
+                CssMinifier.minify("a { animation-delay: 0s; }"));
+        }
+
+        @Test
+        void preservesZeroMsInTransitionDuration() {
+            assertEquals("a{transition-duration:0ms}",
+                CssMinifier.minify("a { transition-duration: 0ms; }"));
         }
     }
 
@@ -2168,6 +2201,71 @@ class CssMinifierTest {
             String result = CssMinifier.minify(input);
             assertTrue(result.contains("-moz-appearance:textfield"));
             assertTrue(result.contains("appearance:textfield"));
+        }
+
+        @Test
+        void preservesCalcFallback() {
+            // width:92% is a fallback for browsers that don't support calc()
+            String input = "a { width: 92%; width: calc(100% - 3rem); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("width:92%"), "Should keep calc() fallback value");
+            assertTrue(result.contains("width:calc(100% - 3rem)"), "Should keep calc() value");
+        }
+
+        @Test
+        void preservesVarFallback() {
+            // color:blue is a fallback for browsers that don't support var()
+            String input = "a { color: blue; color: var(--primary); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("color:blue"), "Should keep var() fallback");
+            assertTrue(result.contains("color:var(--primary)"), "Should keep var() value");
+        }
+
+        @Test
+        void preservesMinFunctionFallback() {
+            String input = "a { width: 500px; width: min(500px, 100%); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("width:500px"), "Should keep min() fallback");
+            assertTrue(result.contains("width:min(500px,100%)"), "Should keep min() value");
+        }
+
+        @Test
+        void preservesMaxFunctionFallback() {
+            String input = "a { width: 200px; width: max(200px, 50%); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("width:200px"), "Should keep max() fallback");
+            assertTrue(result.contains("width:max(200px,50%)"), "Should keep max() value");
+        }
+
+        @Test
+        void preservesClampFunctionFallback() {
+            String input = "a { font-size: 16px; font-size: clamp(14px, 2vw, 20px); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("font-size:16px"), "Should keep clamp() fallback");
+            assertTrue(result.contains("font-size:clamp(14px,2vw,20px)"), "Should keep clamp() value");
+        }
+
+        @Test
+        void preservesEnvFunctionFallback() {
+            String input = "a { padding-top: 20px; padding-top: env(safe-area-inset-top); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("padding-top:20px"), "Should keep env() fallback");
+            assertTrue(result.contains("padding-top:env(safe-area-inset-top)"), "Should keep env() value");
+        }
+
+        @Test
+        void deduplicatesWhenNoFallbackNeeded() {
+            // Neither value uses modern CSS functions or vendor prefixes → safe to dedup
+            String input = "a { display: block; display: flex; }";
+            assertEquals("a{display:flex}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void preservesCalcFallbackInsideMediaQuery() {
+            String input = "@media screen { a { width: 92%; width: calc(100% - 3rem); } }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("width:92%"));
+            assertTrue(result.contains("width:calc(100% - 3rem)"));
         }
     }
 
