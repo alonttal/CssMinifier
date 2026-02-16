@@ -100,7 +100,3 @@ mvn test
 ```
 
 399 tests covering comments, whitespace, selectors, at-rules, property values, strings, hex colors, zero units, font-weight, shorthand collapse, leading zeros, license comments, pseudo-class spacing, calc spacing, duplicate removal, vendor fallbacks, rule merging, keyframes, transforms, background/outline, attribute selectors, URL quotes, calc whitespace, custom properties, and real-world CSS patterns.
-
-## License
-
-MIT
