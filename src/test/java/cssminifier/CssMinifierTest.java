@@ -1540,6 +1540,67 @@ class CssMinifierTest {
         }
     }
 
+    // ==================== CUSTOM PROPERTY ZERO PRESERVATION ====================
+
+    @Nested
+    class CustomPropertyZeroPreservation {
+
+        @Test
+        void preservesZeroPercentInCustomProperty() {
+            assertEquals(":root{--lightness:0%}",
+                CssMinifier.minify(":root { --lightness: 0%; }"));
+        }
+
+        @Test
+        void preservesZeroDegInCustomProperty() {
+            assertEquals(":root{--angle:0deg}",
+                CssMinifier.minify(":root { --angle: 0deg; }"));
+        }
+
+        @Test
+        void preservesZeroPxInCustomProperty() {
+            assertEquals(":root{--gap:0px}",
+                CssMinifier.minify(":root { --gap: 0px; }"));
+        }
+
+        @Test
+        void preservesZeroRemInCustomProperty() {
+            assertEquals(":root{--space:0rem}",
+                CssMinifier.minify(":root { --space: 0rem; }"));
+        }
+
+        @Test
+        void preservesZeroEmInCustomProperty() {
+            assertEquals(":root{--size:0em}",
+                CssMinifier.minify(":root { --size: 0em; }"));
+        }
+
+        @Test
+        void stillStripsZeroUnitInRegularProperty() {
+            // Regular properties should still have units stripped
+            assertEquals("a{margin:0;padding:0}",
+                CssMinifier.minify("a { margin: 0px; padding: 0em; }"));
+        }
+
+        @Test
+        void preservesMultipleZeroUnitsInCustomProperties() {
+            assertEquals(":root{--a:0%;--b:0deg;--c:0px}",
+                CssMinifier.minify(":root { --a: 0%; --b: 0deg; --c: 0px; }"));
+        }
+
+        @Test
+        void mixesCustomAndRegularProperties() {
+            assertEquals(":root{--gap:0px;margin:0}",
+                CssMinifier.minify(":root { --gap: 0px; margin: 0px; }"));
+        }
+
+        @Test
+        void preservesZeroUnitInCustomPropertyInsideRule() {
+            assertEquals(".a{--offset:0px;margin:0}",
+                CssMinifier.minify(".a { --offset: 0px; margin: 0px; }"));
+        }
+    }
+
     // ==================== FONT-WEIGHT SHORTENING ====================
 
     @Nested
@@ -2366,6 +2427,30 @@ class CssMinifierTest {
             // "to" should stay as "to" (100% is longer)
             assertEquals("@keyframes a{to{opacity:1}}",
                 CssMinifier.minify("@keyframes a { to { opacity: 1; } }"));
+        }
+
+        @Test
+        void doesNotConvertFromInClassSelector() {
+            assertEquals(".from{color:red}",
+                CssMinifier.minify(".from { color: red; }"));
+        }
+
+        @Test
+        void doesNotConvertFromInIdSelector() {
+            assertEquals("#from{color:red}",
+                CssMinifier.minify("#from { color: red; }"));
+        }
+
+        @Test
+        void doesNotConvertFromInCompoundSelector() {
+            assertEquals("div.from{margin:0}",
+                CssMinifier.minify("div.from { margin: 0; }"));
+        }
+
+        @Test
+        void doesNotConvertFromInAttributeSelector() {
+            assertEquals("[data-from]{display:block}",
+                CssMinifier.minify("[data-from] { display: block; }"));
         }
 
         @Test

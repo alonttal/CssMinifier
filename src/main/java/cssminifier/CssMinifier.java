@@ -163,9 +163,9 @@ public class CssMinifier {
     private static final Pattern FONT_WEIGHT = Pattern.compile(
         "font-weight:(normal|bold)(?=[;}\"])");
 
-    // 6. Keyframe from → 0%, 100% → to
+    // 6. Keyframe from → 0%, 100% → to (only in keyframe context: preceded by { or })
     private static final Pattern KEYFRAME_FROM = Pattern.compile(
-        "\\bfrom(?=\\s*[{,])");
+        "(?<=[{}])from(?=\\s*[{,])");
     private static final Pattern KEYFRAME_100 = Pattern.compile(
         "(?<=[{}])100%(?=\\s*[{,])");
 
@@ -233,6 +233,22 @@ public class CssMinifier {
         return result.toString();
     }
 
+    private static boolean isInCustomProperty(String segment, int pos) {
+        // Scan backward to find start of current declaration (after ; or { or start)
+        int declStart = 0;
+        for (int k = pos - 1; k >= 0; k--) {
+            char ch = segment.charAt(k);
+            if (ch == ';' || ch == '{') {
+                declStart = k + 1;
+                break;
+            }
+        }
+        // Check if declaration starts with '--'
+        return declStart + 1 < segment.length()
+            && segment.charAt(declStart) == '-'
+            && segment.charAt(declStart + 1) == '-';
+    }
+
     private static String optimizeSegment(String segment) {
         // 1. Shorten 8-digit hex colors
         Matcher m8 = HEX8.matcher(segment);
@@ -256,13 +272,16 @@ public class CssMinifier {
         m6.appendTail(sb);
         segment = sb.toString();
 
-        // 3. Remove units on zero values (skip 0% in keyframe selectors like "0%{")
+        // 3. Remove units on zero values (skip keyframe selectors and custom properties)
         Matcher mz = ZERO_UNIT.matcher(segment);
         sb = new StringBuilder();
         while (mz.find()) {
             int afterMatch = mz.end();
             // Don't strip 0% when it's a keyframe selector (followed by '{')
             if (mz.group(1).equals("%") && afterMatch < segment.length() && segment.charAt(afterMatch) == '{') {
+                mz.appendReplacement(sb, Matcher.quoteReplacement(mz.group()));
+            // Don't strip units inside custom property declarations (--name:0px)
+            } else if (isInCustomProperty(segment, mz.start())) {
                 mz.appendReplacement(sb, Matcher.quoteReplacement(mz.group()));
             } else {
                 mz.appendReplacement(sb, "0");
