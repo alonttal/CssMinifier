@@ -88,11 +88,6 @@ stripComments → collapseWhitespace → optimizeValues → optimizeQuotedTokens
 - Preserves pseudo-class descendant spaces (`.parent :hover` vs `.parent:hover`)
 - Preserves units in custom property declarations (`--gap: 0%` stays `--gap:0%`)
 
-## Requirements
-
-- Java 17+
-- Maven 3.x (build only)
-
 ## Tests
 
 ```bash
