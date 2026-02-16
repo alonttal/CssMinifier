@@ -79,6 +79,8 @@ public class CssMinifier {
         // Strip around combinators '>' '+' '~' only outside parentheses
         // (inside parens, '+' and '-' are math operators in calc/min/max/clamp)
         if ((c == '>' || c == '+' || c == '~') && parenDepth == 0) return true;
+        // Strip space before '!' (for !important: "red !important" -> "red!important")
+        if (c == '!' && braceDepth > 0) return true;
         return false;
     }
 
@@ -454,30 +456,56 @@ public class CssMinifier {
         return result.toString();
     }
 
+    private static boolean hasVendorPrefix(String value) {
+        return value.contains("-webkit-") || value.contains("-moz-")
+            || value.contains("-ms-") || value.contains("-o-");
+    }
+
     private static String deduplicateBlock(String block) {
         if (block.isEmpty()) return block;
 
         String[] declarations = block.split(";");
-        LinkedHashMap<String, String> props = new LinkedHashMap<>();
-        for (String decl : declarations) {
+
+        // Group declaration indices by property name
+        LinkedHashMap<String, java.util.List<Integer>> propIndices = new LinkedHashMap<>();
+        for (int i = 0; i < declarations.length; i++) {
+            String decl = declarations[i];
             int colon = decl.indexOf(':');
             if (colon > 0) {
                 String prop = decl.substring(0, colon);
-                String value = decl.substring(colon + 1);
-                props.put(prop, value);
-            } else if (!decl.isEmpty()) {
-                // No colon — preserve as-is (shouldn't happen in well-formed CSS)
-                props.put(decl, null);
+                propIndices.computeIfAbsent(prop, k -> new java.util.ArrayList<>()).add(i);
+            }
+        }
+
+        // For properties with duplicates: if any value has a vendor prefix,
+        // keep all (it's a browser fallback chain). Otherwise keep only last.
+        java.util.Set<Integer> toRemove = new java.util.HashSet<>();
+        for (var entry : propIndices.entrySet()) {
+            java.util.List<Integer> indices = entry.getValue();
+            if (indices.size() <= 1) continue;
+
+            boolean anyVendorPrefixed = false;
+            for (int idx : indices) {
+                String value = declarations[idx].substring(declarations[idx].indexOf(':') + 1);
+                if (hasVendorPrefix(value)) {
+                    anyVendorPrefixed = true;
+                    break;
+                }
+            }
+
+            if (!anyVendorPrefixed) {
+                // Safe to dedup: remove all but the last
+                for (int i = 0; i < indices.size() - 1; i++) {
+                    toRemove.add(indices.get(i));
+                }
             }
         }
 
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, String> entry : props.entrySet()) {
+        for (int i = 0; i < declarations.length; i++) {
+            if (declarations[i].isEmpty() || toRemove.contains(i)) continue;
             if (sb.length() > 0) sb.append(';');
-            sb.append(entry.getKey());
-            if (entry.getValue() != null) {
-                sb.append(':').append(entry.getValue());
-            }
+            sb.append(declarations[i]);
         }
         return sb.toString();
     }

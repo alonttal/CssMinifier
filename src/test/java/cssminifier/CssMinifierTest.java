@@ -612,8 +612,53 @@ class CssMinifierTest {
 
         @Test
         void handlesImportant() {
-            assertEquals("a{color:red !important}",
+            assertEquals("a{color:red!important}",
                 CssMinifier.minify("a { color: red !important; }"));
+        }
+
+        @Test
+        void handlesImportantNoSpace() {
+            // Already no space before !important
+            assertEquals("a{color:red!important}",
+                CssMinifier.minify("a { color: red!important; }"));
+        }
+
+        @Test
+        void handlesImportantWithMultipleSpaces() {
+            assertEquals("a{color:red!important}",
+                CssMinifier.minify("a { color: red   !important; }"));
+        }
+
+        @Test
+        void handlesImportantOnMultipleProperties() {
+            assertEquals("a{color:red!important;font-size:12px!important}",
+                CssMinifier.minify("a { color: red !important; font-size: 12px !important; }"));
+        }
+
+        @Test
+        void handlesImportantWithHexColor() {
+            assertEquals("a{color:#f00!important}",
+                CssMinifier.minify("a { color: #ff0000 !important; }"));
+        }
+
+        @Test
+        void handlesImportantWithDecimal() {
+            assertEquals("a{opacity:.5!important}",
+                CssMinifier.minify("a { opacity: 0.5 !important; }"));
+        }
+
+        @Test
+        void handlesImportantInsideMediaQuery() {
+            assertEquals("@media screen{a{color:red!important}}",
+                CssMinifier.minify("@media screen { a { color: red !important; } }"));
+        }
+
+        @Test
+        void doesNotStripExclamationInSelector() {
+            // ! shouldn't be treated as strip char outside declarations
+            // This is an edge case — CSS selectors don't use ! but let's be safe
+            assertEquals("a{content:\"!important\"}",
+                CssMinifier.minify("a { content: \"!important\"; }"));
         }
 
         @Test
@@ -2037,6 +2082,92 @@ class CssMinifierTest {
             String result = CssMinifier.minify("a { -webkit-transform: scale(1); transform: scale(1); }");
             assertTrue(result.contains("-webkit-transform:scale(1)"));
             assertTrue(result.contains("transform:scale(1)"));
+        }
+
+        @Test
+        void preservesDisplayVendorFallbackChain() {
+            // display:-webkit-box; display:-ms-flexbox; display:flex — must all be kept
+            String input = "a { display: -webkit-box; display: -ms-flexbox; display: flex; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("display:-webkit-box"), "Should keep -webkit-box fallback");
+            assertTrue(result.contains("display:-ms-flexbox"), "Should keep -ms-flexbox fallback");
+            assertTrue(result.contains("display:flex"), "Should keep final flex value");
+        }
+
+        @Test
+        void preservesWebkitBackdropFilterFallback() {
+            String input = "a { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("-webkit-backdrop-filter:blur(10px)"));
+            assertTrue(result.contains("backdrop-filter:blur(10px)"));
+        }
+
+        @Test
+        void preservesTransitionPropertyVendorFallback() {
+            // transition-property with vendor-prefixed values should be preserved
+            String input = "a { transition-property: -webkit-backdrop-filter; transition-property: backdrop-filter; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("transition-property:-webkit-backdrop-filter"),
+                "Should keep vendor-prefixed transition-property fallback");
+            assertTrue(result.contains("transition-property:backdrop-filter"),
+                "Should keep standard transition-property");
+        }
+
+        @Test
+        void preservesDisplayWebkitInlineFallback() {
+            String input = "a { display: -webkit-inline-box; display: -ms-inline-flexbox; display: inline-flex; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("display:-webkit-inline-box"));
+            assertTrue(result.contains("display:-ms-inline-flexbox"));
+            assertTrue(result.contains("display:inline-flex"));
+        }
+
+        @Test
+        void preservesAppearanceVendorFallback() {
+            String input = "a { -webkit-appearance: none; -moz-appearance: none; appearance: none; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("-webkit-appearance:none"));
+            assertTrue(result.contains("-moz-appearance:none"));
+            assertTrue(result.contains("appearance:none"));
+        }
+
+        @Test
+        void deduplicatesSamePropertyWithoutVendorPrefix() {
+            // No vendor prefixes in values → safe to dedup
+            String input = "a { display: block; display: flex; }";
+            assertEquals("a{display:flex}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void deduplicatesSameValueNonVendor() {
+            // Exact same non-vendor declaration repeated — dedup
+            String input = "a { color: red; color: red; }";
+            assertEquals("a{color:red}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void preservesMsGridVendorFallback() {
+            String input = "a { display: -ms-grid; display: grid; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("display:-ms-grid"), "Should keep -ms-grid fallback");
+            assertTrue(result.contains("display:grid"), "Should keep standard grid");
+        }
+
+        @Test
+        void preservesVendorFallbackInsideMediaQuery() {
+            String input = "@media screen { a { display: -webkit-box; display: -ms-flexbox; display: flex; } }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("display:-webkit-box"));
+            assertTrue(result.contains("display:-ms-flexbox"));
+            assertTrue(result.contains("display:flex"));
+        }
+
+        @Test
+        void preservesMozAppearanceFallback() {
+            String input = "a { -moz-appearance: textfield; appearance: textfield; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("-moz-appearance:textfield"));
+            assertTrue(result.contains("appearance:textfield"));
         }
     }
 
