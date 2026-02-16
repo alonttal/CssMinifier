@@ -687,7 +687,7 @@ class CssMinifierTest {
 
         @Test
         void handlesHexColor() {
-            assertEquals("a{color:#ff0000}", CssMinifier.minify("a { color: #ff0000; }"));
+            assertEquals("a{color:#f00}", CssMinifier.minify("a { color: #ff0000; }"));
         }
 
         @Test
@@ -1006,7 +1006,7 @@ class CssMinifierTest {
             assertEquals(
                 ".spinner{width:40px;height:40px;border:4px solid #f3f3f3;" +
                 "border-top:4px solid #3498db;border-radius:50%;animation:spin 1s linear infinite}" +
-                "@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}",
+                "@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}",
                 CssMinifier.minify(input));
         }
 
@@ -1124,6 +1124,548 @@ class CssMinifierTest {
                 "body{font-size:var(--font-size-base);line-height:var(--line-height-base);color:var(--secondary)}" +
                 "a{color:var(--primary)}",
                 CssMinifier.minify(input));
+        }
+    }
+
+    // ==================== HEX COLOR SHORTENING ====================
+
+    @Nested
+    class HexColors {
+
+        @Test
+        void shortens6DigitWithMatchingPairs() {
+            assertEquals("a{color:#abc}", CssMinifier.minify("a { color: #aabbcc; }"));
+        }
+
+        @Test
+        void shortensUppercase6Digit() {
+            assertEquals("a{color:#abc}", CssMinifier.minify("a { color: #AABBCC; }"));
+        }
+
+        @Test
+        void shortensMixedCase6Digit() {
+            assertEquals("a{color:#abc}", CssMinifier.minify("a { color: #AaBbCc; }"));
+        }
+
+        @Test
+        void shortensWhite() {
+            assertEquals("a{color:#fff}", CssMinifier.minify("a { color: #ffffff; }"));
+        }
+
+        @Test
+        void shortensBlack() {
+            assertEquals("a{color:#000}", CssMinifier.minify("a { color: #000000; }"));
+        }
+
+        @Test
+        void shortensRed() {
+            assertEquals("a{color:#f00}", CssMinifier.minify("a { color: #ff0000; }"));
+        }
+
+        @Test
+        void shortensGreen() {
+            assertEquals("a{color:#0f0}", CssMinifier.minify("a { color: #00ff00; }"));
+        }
+
+        @Test
+        void shortensBlue() {
+            assertEquals("a{color:#00f}", CssMinifier.minify("a { color: #0000ff; }"));
+        }
+
+        @Test
+        void shortens112233() {
+            assertEquals("a{color:#123}", CssMinifier.minify("a { color: #112233; }"));
+        }
+
+        @Test
+        void doesNotShortenNonMatchingPairs() {
+            assertEquals("a{color:#123456}", CssMinifier.minify("a { color: #123456; }"));
+        }
+
+        @Test
+        void doesNotShortenAbcdef() {
+            assertEquals("a{color:#abcdef}", CssMinifier.minify("a { color: #abcdef; }"));
+        }
+
+        @Test
+        void doesNotShortenF0f0f0() {
+            assertEquals("a{color:#f0f0f0}", CssMinifier.minify("a { color: #f0f0f0; }"));
+        }
+
+        @Test
+        void leaves3DigitHexAlone() {
+            assertEquals("a{color:#abc}", CssMinifier.minify("a { color: #abc; }"));
+        }
+
+        @Test
+        void leaves3DigitUppercaseAlone() {
+            assertEquals("a{color:#ABC}", CssMinifier.minify("a { color: #ABC; }"));
+        }
+
+        @Test
+        void shortensMultipleHexInOneRule() {
+            assertEquals("a{color:#f00;background:#0f0}",
+                CssMinifier.minify("a { color: #ff0000; background: #00ff00; }"));
+        }
+
+        @Test
+        void shortensHexInBorderValue() {
+            assertEquals("a{border:1px solid #f00}",
+                CssMinifier.minify("a { border: 1px solid #ff0000; }"));
+        }
+
+        @Test
+        void shortensHexInBoxShadow() {
+            assertEquals("a{box-shadow:0 0 5px #000}",
+                CssMinifier.minify("a { box-shadow: 0 0 5px #000000; }"));
+        }
+
+        @Test
+        void shortensHexInCustomProperty() {
+            assertEquals(":root{--color:#f00}",
+                CssMinifier.minify(":root { --color: #ff0000; }"));
+        }
+
+        @Test
+        void doesNotShortenHexInsideDoubleQuotedString() {
+            assertEquals("a{content:\"#ff0000\"}",
+                CssMinifier.minify("a { content: \"#ff0000\"; }"));
+        }
+
+        @Test
+        void doesNotShortenHexInsideSingleQuotedString() {
+            assertEquals("a{content:'#ff0000'}",
+                CssMinifier.minify("a { content: '#ff0000'; }"));
+        }
+
+        @Test
+        void shortens8DigitHexWithMatchingPairs() {
+            assertEquals("a{color:#f000}",
+                CssMinifier.minify("a { color: #ff000000; }"));
+        }
+
+        @Test
+        void shortens8DigitWhiteWithAlpha() {
+            assertEquals("a{color:#ffff}",
+                CssMinifier.minify("a { color: #ffffffff; }"));
+        }
+
+        @Test
+        void doesNotShorten8DigitNonMatchingPairs() {
+            assertEquals("a{color:#f0f0f011}",
+                CssMinifier.minify("a { color: #f0f0f011; }"));
+        }
+
+        @Test
+        void shortensMultipleHexAcrossRules() {
+            assertEquals("a{color:#f00}b{color:#0f0}",
+                CssMinifier.minify("a { color: #ff0000; } b { color: #00ff00; }"));
+        }
+
+        @Test
+        void shortensHexInGradient() {
+            assertEquals("a{background:linear-gradient(#000,#fff)}",
+                CssMinifier.minify("a { background: linear-gradient(#000000, #ffffff); }"));
+        }
+
+        @Test
+        void outputIsLowercase() {
+            assertEquals("a{color:#abc}", CssMinifier.minify("a { color: #AABBCC; }"));
+        }
+    }
+
+    // ==================== ZERO UNIT REMOVAL ====================
+
+    @Nested
+    class ZeroUnits {
+
+        @Test
+        void removesZeroPx() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0px; }"));
+        }
+
+        @Test
+        void removesZeroEm() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0em; }"));
+        }
+
+        @Test
+        void removesZeroRem() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0rem; }"));
+        }
+
+        @Test
+        void removesZeroPt() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0pt; }"));
+        }
+
+        @Test
+        void removesZeroCm() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0cm; }"));
+        }
+
+        @Test
+        void removesZeroMm() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0mm; }"));
+        }
+
+        @Test
+        void removesZeroIn() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0in; }"));
+        }
+
+        @Test
+        void removesZeroPc() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0pc; }"));
+        }
+
+        @Test
+        void removesZeroEx() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0ex; }"));
+        }
+
+        @Test
+        void removesZeroCh() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0ch; }"));
+        }
+
+        @Test
+        void removesZeroVw() {
+            assertEquals("a{width:0}", CssMinifier.minify("a { width: 0vw; }"));
+        }
+
+        @Test
+        void removesZeroVh() {
+            assertEquals("a{height:0}", CssMinifier.minify("a { height: 0vh; }"));
+        }
+
+        @Test
+        void removesZeroVmin() {
+            assertEquals("a{width:0}", CssMinifier.minify("a { width: 0vmin; }"));
+        }
+
+        @Test
+        void removesZeroVmax() {
+            assertEquals("a{width:0}", CssMinifier.minify("a { width: 0vmax; }"));
+        }
+
+        @Test
+        void removesZeroDeg() {
+            assertEquals("a{transform:rotate(0)}",
+                CssMinifier.minify("a { transform: rotate(0deg); }"));
+        }
+
+        @Test
+        void removesZeroRad() {
+            assertEquals("a{transform:rotate(0)}",
+                CssMinifier.minify("a { transform: rotate(0rad); }"));
+        }
+
+        @Test
+        void removesZeroTurn() {
+            assertEquals("a{transform:rotate(0)}",
+                CssMinifier.minify("a { transform: rotate(0turn); }"));
+        }
+
+        @Test
+        void removesZeroMs() {
+            assertEquals("a{transition:all 0}",
+                CssMinifier.minify("a { transition: all 0ms; }"));
+        }
+
+        @Test
+        void removesZeroS() {
+            assertEquals("a{transition:all 0}",
+                CssMinifier.minify("a { transition: all 0s; }"));
+        }
+
+        @Test
+        void removesZeroPercent() {
+            assertEquals("a{opacity:0}", CssMinifier.minify("a { opacity: 0%; }"));
+        }
+
+        @Test
+        void doesNotRemoveNonZeroUnit() {
+            assertEquals("a{margin:10px}", CssMinifier.minify("a { margin: 10px; }"));
+        }
+
+        @Test
+        void doesNotRemoveNonZeroUnitEm() {
+            assertEquals("a{margin:1.5em}", CssMinifier.minify("a { margin: 1.5em; }"));
+        }
+
+        @Test
+        void leavesPlainZeroAlone() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0; }"));
+        }
+
+        @Test
+        void removesMultipleZeroUnitsInShorthand() {
+            assertEquals("a{margin:0 0 0 0}",
+                CssMinifier.minify("a { margin: 0px 0px 0px 0px; }"));
+        }
+
+        @Test
+        void removesZeroUnitMixedWithNonZero() {
+            assertEquals("a{margin:0 10px 0 20px}",
+                CssMinifier.minify("a { margin: 0px 10px 0px 20px; }"));
+        }
+
+        @Test
+        void preservesZeroPercentInKeyframeSelector() {
+            String input = """
+                    @keyframes fade {
+                        0% {
+                            opacity: 0;
+                        }
+                        100% {
+                            opacity: 1;
+                        }
+                    }
+                    """;
+            assertEquals("@keyframes fade{0%{opacity:0}100%{opacity:1}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void removesZeroUnitInsideKeyframeBody() {
+            String input = """
+                    @keyframes slide {
+                        from {
+                            margin-left: 0px;
+                        }
+                        to {
+                            margin-left: 100px;
+                        }
+                    }
+                    """;
+            assertEquals("@keyframes slide{from{margin-left:0}to{margin-left:100px}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void doesNotTouchZeroInsideString() {
+            assertEquals("a{content:\"0px\"}",
+                CssMinifier.minify("a { content: \"0px\"; }"));
+        }
+
+        @Test
+        void removesZeroUnitInCommaSeparatedValue() {
+            assertEquals("a{margin:0,0}",
+                CssMinifier.minify("a { margin: 0px, 0px; }"));
+        }
+
+        @Test
+        void removesZeroUnitAfterOpenParen() {
+            assertEquals("a{transform:translate(0,0)}",
+                CssMinifier.minify("a { transform: translate(0px, 0px); }"));
+        }
+    }
+
+    // ==================== FONT-WEIGHT SHORTENING ====================
+
+    @Nested
+    class FontWeight {
+
+        @Test
+        void shortensBoldTo700() {
+            assertEquals("a{font-weight:700}", CssMinifier.minify("a { font-weight: bold; }"));
+        }
+
+        @Test
+        void shortensNormalTo400() {
+            assertEquals("a{font-weight:400}", CssMinifier.minify("a { font-weight: normal; }"));
+        }
+
+        @Test
+        void doesNotChange100() {
+            assertEquals("a{font-weight:100}", CssMinifier.minify("a { font-weight: 100; }"));
+        }
+
+        @Test
+        void doesNotChange700() {
+            assertEquals("a{font-weight:700}", CssMinifier.minify("a { font-weight: 700; }"));
+        }
+
+        @Test
+        void doesNotChangeBolder() {
+            assertEquals("a{font-weight:bolder}", CssMinifier.minify("a { font-weight: bolder; }"));
+        }
+
+        @Test
+        void doesNotChangeLighter() {
+            assertEquals("a{font-weight:lighter}", CssMinifier.minify("a { font-weight: lighter; }"));
+        }
+
+        @Test
+        void doesNotChangeInFontShorthand() {
+            // font shorthand is a different property, should not be affected
+            assertEquals("a{font:bold 16px Arial}",
+                CssMinifier.minify("a { font: bold 16px Arial; }"));
+        }
+
+        @Test
+        void shortensInMultipleRules() {
+            assertEquals("a{font-weight:700}b{font-weight:400}",
+                CssMinifier.minify("a { font-weight: bold; } b { font-weight: normal; }"));
+        }
+
+        @Test
+        void shortensWithOtherProperties() {
+            assertEquals("a{color:red;font-weight:700;font-size:14px}",
+                CssMinifier.minify("a { color: red; font-weight: bold; font-size: 14px; }"));
+        }
+
+        @Test
+        void doesNotChangeBoldInsideString() {
+            assertEquals("a{content:\"font-weight:bold\"}",
+                CssMinifier.minify("a { content: \"font-weight:bold\"; }"));
+        }
+    }
+
+    // ==================== SHORTHAND COLLAPSING ====================
+
+    @Nested
+    class ShorthandCollapse {
+
+        @Test
+        void collapsesMarginAllSame() {
+            assertEquals("a{margin:10px}",
+                CssMinifier.minify("a { margin-top: 10px; margin-right: 10px; margin-bottom: 10px; margin-left: 10px; }"));
+        }
+
+        @Test
+        void collapsesPaddingAllSame() {
+            assertEquals("a{padding:5px}",
+                CssMinifier.minify("a { padding-top: 5px; padding-right: 5px; padding-bottom: 5px; padding-left: 5px; }"));
+        }
+
+        @Test
+        void collapsesMarginTwoValues() {
+            assertEquals("a{margin:10px 20px}",
+                CssMinifier.minify("a { margin-top: 10px; margin-right: 20px; margin-bottom: 10px; margin-left: 20px; }"));
+        }
+
+        @Test
+        void collapsesPaddingTwoValues() {
+            assertEquals("a{padding:5px 10px}",
+                CssMinifier.minify("a { padding-top: 5px; padding-right: 10px; padding-bottom: 5px; padding-left: 10px; }"));
+        }
+
+        @Test
+        void collapsesMarginThreeValues() {
+            assertEquals("a{margin:10px 20px 30px}",
+                CssMinifier.minify("a { margin-top: 10px; margin-right: 20px; margin-bottom: 30px; margin-left: 20px; }"));
+        }
+
+        @Test
+        void collapsesMarginFourValues() {
+            assertEquals("a{margin:10px 20px 30px 40px}",
+                CssMinifier.minify("a { margin-top: 10px; margin-right: 20px; margin-bottom: 30px; margin-left: 40px; }"));
+        }
+
+        @Test
+        void collapsesPaddingFourValues() {
+            assertEquals("a{padding:1px 2px 3px 4px}",
+                CssMinifier.minify("a { padding-top: 1px; padding-right: 2px; padding-bottom: 3px; padding-left: 4px; }"));
+        }
+
+        @Test
+        void collapsesMarginWithZero() {
+            assertEquals("a{margin:0}",
+                CssMinifier.minify("a { margin-top: 0; margin-right: 0; margin-bottom: 0; margin-left: 0; }"));
+        }
+
+        @Test
+        void collapsesMarginZeroAndValue() {
+            assertEquals("a{margin:0 auto}",
+                CssMinifier.minify("a { margin-top: 0; margin-right: auto; margin-bottom: 0; margin-left: auto; }"));
+        }
+
+        @Test
+        void doesNotCollapseWhenOnlyThreeSidesPresent() {
+            assertEquals("a{margin-top:10px;margin-right:20px;margin-bottom:30px}",
+                CssMinifier.minify("a { margin-top: 10px; margin-right: 20px; margin-bottom: 30px; }"));
+        }
+
+        @Test
+        void doesNotCollapseWhenOnlyTwoSidesPresent() {
+            assertEquals("a{margin-top:10px;margin-bottom:20px}",
+                CssMinifier.minify("a { margin-top: 10px; margin-bottom: 20px; }"));
+        }
+
+        @Test
+        void doesNotCollapseWhenOnlyOneSidePresent() {
+            assertEquals("a{margin-top:10px}",
+                CssMinifier.minify("a { margin-top: 10px; }"));
+        }
+
+        @Test
+        void preservesOtherPropertiesAlongside() {
+            String input = "a { color: red; margin-top: 10px; margin-right: 10px; margin-bottom: 10px; margin-left: 10px; font-size: 14px; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("color:red"), "Should preserve color");
+            assertTrue(result.contains("font-size:14px"), "Should preserve font-size");
+            assertTrue(result.contains("margin:10px"), "Should collapse margin");
+        }
+
+        @Test
+        void collapsesBothMarginAndPadding() {
+            String input = "a { margin-top: 10px; margin-right: 10px; margin-bottom: 10px; margin-left: 10px; " +
+                "padding-top: 5px; padding-right: 5px; padding-bottom: 5px; padding-left: 5px; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("margin:10px"), "Should collapse margin");
+            assertTrue(result.contains("padding:5px"), "Should collapse padding");
+        }
+
+        @Test
+        void doesNotCollapseInNestedAtRuleWithNestedBlocks() {
+            String input = """
+                    @media screen {
+                        a {
+                            margin-top: 10px;
+                            margin-right: 10px;
+                            margin-bottom: 10px;
+                            margin-left: 10px;
+                        }
+                    }
+                    """;
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("margin:10px"), "Should collapse margin in nested rule");
+        }
+
+        @Test
+        void collapsesWithMixedUnits() {
+            // 3-value shorthand: top right bottom (left copies right)
+            assertEquals("a{margin:0 auto 10px}",
+                CssMinifier.minify("a { margin-top: 0; margin-right: auto; margin-bottom: 10px; margin-left: auto; }"));
+        }
+
+        @Test
+        void collapsesRegardlessOfPropertyOrder() {
+            assertEquals("a{margin:10px 20px 30px 40px}",
+                CssMinifier.minify("a { margin-left: 40px; margin-top: 10px; margin-bottom: 30px; margin-right: 20px; }"));
+        }
+
+        @Test
+        void collapsesMarginWithAutoValues() {
+            assertEquals("a{margin:0 auto}",
+                CssMinifier.minify("a { margin-top: 0; margin-right: auto; margin-bottom: 0; margin-left: auto; }"));
+        }
+
+        @Test
+        void collapsesPaddingAllZero() {
+            assertEquals("a{padding:0}",
+                CssMinifier.minify("a { padding-top: 0px; padding-right: 0px; padding-bottom: 0px; padding-left: 0px; }"));
+        }
+
+        @Test
+        void collapsesInMultipleRules() {
+            String input = "a { margin-top: 10px; margin-right: 10px; margin-bottom: 10px; margin-left: 10px; } " +
+                "b { padding-top: 5px; padding-right: 5px; padding-bottom: 5px; padding-left: 5px; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("a{margin:10px}"), "Should collapse a's margin");
+            assertTrue(result.contains("b{padding:5px}"), "Should collapse b's padding");
         }
     }
 
