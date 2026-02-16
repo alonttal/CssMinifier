@@ -80,6 +80,8 @@ public class CssMinifier {
         // Strip around combinators '>' '+' '~' only outside parentheses
         // (inside parens, '+' and '-' are math operators in calc/min/max/clamp)
         if ((c == '>' || c == '+' || c == '~') && parenDepth == 0) return true;
+        // Strip around '*' '/' inside parentheses (calc operators — spaces optional per spec)
+        if ((c == '*' || c == '/') && parenDepth > 0) return true;
         // Strip space before '!' (for !important: "red !important" -> "red!important")
         if (c == '!' && braceDepth > 0) return true;
         return false;
@@ -161,23 +163,33 @@ public class CssMinifier {
     private static final Pattern FONT_WEIGHT = Pattern.compile(
         "font-weight:(normal|bold)(?=[;}\"])");
 
-    // 6. Keyframe from → 0%
+    // 6. Keyframe from → 0%, 100% → to
     private static final Pattern KEYFRAME_FROM = Pattern.compile(
         "\\bfrom(?=\\s*[{,])");
+    private static final Pattern KEYFRAME_100 = Pattern.compile(
+        "(?<=[{}])100%(?=\\s*[{,])");
 
-    // 7. translate3d(0,0,0) → translateZ(0)
-    private static final Pattern TRANSLATE3D_ZERO = Pattern.compile(
-        "translate3d\\(0,\\s*0,\\s*0\\)");
+    // 7. translate3d(0,0,X) → translateZ(X) (any Z value, including 0)
+    private static final Pattern TRANSLATE3D_Z = Pattern.compile(
+        "translate3d\\(0,\\s*0,\\s*([^)]+)\\)");
 
     // 8. scale3d(1,1,1) → scaleX(1)
     private static final Pattern SCALE3D_IDENTITY = Pattern.compile(
         "scale3d\\(1,\\s*1,\\s*1\\)");
 
-    // 9. background:transparent/none → background:0 0
+    // 9. rotate3d single-axis → rotate/rotateX/rotateY
+    private static final Pattern ROTATE3D_Z = Pattern.compile(
+        "rotate3d\\(0,\\s*0,\\s*1,\\s*([^)]+)\\)");
+    private static final Pattern ROTATE3D_Y = Pattern.compile(
+        "rotate3d\\(0,\\s*1,\\s*0,\\s*([^)]+)\\)");
+    private static final Pattern ROTATE3D_X = Pattern.compile(
+        "rotate3d\\(1,\\s*0,\\s*0,\\s*([^)]+)\\)");
+
+    // 10. background:transparent/none → background:0 0
     private static final Pattern BACKGROUND_TRANSPARENT = Pattern.compile(
         "background:(transparent|none)(?=[;},!])");
 
-    // 10. outline:none → outline:0
+    // 11. outline:none → outline:0
     private static final Pattern OUTLINE_NONE = Pattern.compile(
         "outline:none(?=[;},!])");
 
@@ -278,19 +290,25 @@ public class CssMinifier {
         mfw.appendTail(sb);
         segment = sb.toString();
 
-        // 6. Keyframe from → 0%
+        // 6. Keyframe from → 0%, 100% → to
         segment = KEYFRAME_FROM.matcher(segment).replaceAll("0%");
+        segment = KEYFRAME_100.matcher(segment).replaceAll("to");
 
-        // 7. translate3d(0,0,0) → translateZ(0)
-        segment = TRANSLATE3D_ZERO.matcher(segment).replaceAll("translateZ(0)");
+        // 7. translate3d(0,0,X) → translateZ(X)
+        segment = TRANSLATE3D_Z.matcher(segment).replaceAll("translateZ($1)");
 
         // 8. scale3d(1,1,1) → scaleX(1)
         segment = SCALE3D_IDENTITY.matcher(segment).replaceAll("scaleX(1)");
 
-        // 9. background:transparent/none → background:0 0
+        // 9. rotate3d single-axis → rotate/rotateX/rotateY
+        segment = ROTATE3D_Z.matcher(segment).replaceAll("rotate($1)");
+        segment = ROTATE3D_Y.matcher(segment).replaceAll("rotateY($1)");
+        segment = ROTATE3D_X.matcher(segment).replaceAll("rotateX($1)");
+
+        // 10. background:transparent/none → background:0 0
         segment = BACKGROUND_TRANSPARENT.matcher(segment).replaceAll("background:0 0");
 
-        // 10. outline:none → outline:0
+        // 11. outline:none → outline:0
         segment = OUTLINE_NONE.matcher(segment).replaceAll("outline:0");
 
         return segment;

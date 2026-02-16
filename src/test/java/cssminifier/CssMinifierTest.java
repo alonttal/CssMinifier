@@ -533,7 +533,7 @@ class CssMinifierTest {
                     }
                     """;
             assertEquals(
-                "@keyframes slide{0%{transform:translateX(0)}50%{transform:translateX(100px)}100%{transform:translateX(0)}}",
+                "@keyframes slide{0%{transform:translateX(0)}50%{transform:translateX(100px)}to{transform:translateX(0)}}",
                 CssMinifier.minify(input));
         }
 
@@ -1051,7 +1051,7 @@ class CssMinifierTest {
             assertEquals(
                 ".spinner{width:40px;height:40px;border:4px solid #f3f3f3;" +
                 "border-top:4px solid #3498db;border-radius:50%;animation:spin 1s linear infinite}" +
-                "@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}",
+                "@keyframes spin{0%{transform:rotate(0)}to{transform:rotate(360deg)}}",
                 CssMinifier.minify(input));
         }
 
@@ -1470,7 +1470,7 @@ class CssMinifierTest {
                         }
                     }
                     """;
-            assertEquals("@keyframes fade{0%{opacity:0}100%{opacity:1}}",
+            assertEquals("@keyframes fade{0%{opacity:0}to{opacity:1}}",
                 CssMinifier.minify(input));
         }
 
@@ -2001,9 +2001,9 @@ class CssMinifierTest {
         }
 
         @Test
-        void preservesSpaceAroundMultiplyInCalc() {
-            // * doesn't need spaces per spec, but we don't strip them (no harm)
-            assertEquals("a{width:calc(100% * 2)}",
+        void stripsSpaceAroundMultiplyInCalc() {
+            // * and / don't need spaces per spec, so we strip them
+            assertEquals("a{width:calc(100%*2)}",
                 CssMinifier.minify("a { width: calc(100% * 2); }"));
         }
 
@@ -2424,8 +2424,8 @@ class CssMinifierTest {
         }
 
         @Test
-        void doesNotConvertTranslate3dWithNonZeroThirdArg() {
-            assertEquals("a{transform:translate3d(0,0,10px)}",
+        void convertsTranslate3dWithNonZeroZToTranslateZ() {
+            assertEquals("a{transform:translateZ(10px)}",
                 CssMinifier.minify("a { transform: translate3d(0, 0, 10px); }"));
         }
 
@@ -2463,6 +2463,153 @@ class CssMinifierTest {
         void convertsWebkitTranslate3dZero() {
             assertEquals("a{-webkit-transform:translateZ(0)}",
                 CssMinifier.minify("a { -webkit-transform: translate3d(0, 0, 0); }"));
+        }
+    }
+
+    // ==================== ROTATE3D SIMPLIFICATION ====================
+
+    @Nested
+    class Rotate3dSimplification {
+
+        @Test
+        void convertsRotate3dZAxisToRotate() {
+            assertEquals("a{transform:rotate(15deg)}",
+                CssMinifier.minify("a { transform: rotate3d(0, 0, 1, 15deg); }"));
+        }
+
+        @Test
+        void convertsRotate3dYAxisToRotateY() {
+            assertEquals("a{transform:rotateY(90deg)}",
+                CssMinifier.minify("a { transform: rotate3d(0, 1, 0, 90deg); }"));
+        }
+
+        @Test
+        void convertsRotate3dXAxisToRotateX() {
+            assertEquals("a{transform:rotateX(45deg)}",
+                CssMinifier.minify("a { transform: rotate3d(1, 0, 0, 45deg); }"));
+        }
+
+        @Test
+        void doesNotConvertRotate3dWithMultipleAxes() {
+            assertEquals("a{transform:rotate3d(1,1,0,45deg)}",
+                CssMinifier.minify("a { transform: rotate3d(1, 1, 0, 45deg); }"));
+        }
+
+        @Test
+        void doesNotConvertRotate3dWithArbitraryAxis() {
+            assertEquals("a{transform:rotate3d(1,2,3,45deg)}",
+                CssMinifier.minify("a { transform: rotate3d(1, 2, 3, 45deg); }"));
+        }
+
+        @Test
+        void convertsRotate3dZeroAngle() {
+            assertEquals("a{transform:rotate(0)}",
+                CssMinifier.minify("a { transform: rotate3d(0, 0, 1, 0deg); }"));
+        }
+
+        @Test
+        void convertsRotate3dNegativeAngle() {
+            assertEquals("a{transform:rotateY(-360deg)}",
+                CssMinifier.minify("a { transform: rotate3d(0, 1, 0, -360deg); }"));
+        }
+
+        @Test
+        void doesNotAffectRotate3dInsideString() {
+            assertEquals("a{content:\"rotate3d(0,0,1,15deg)\"}",
+                CssMinifier.minify("a { content: \"rotate3d(0,0,1,15deg)\"; }"));
+        }
+
+        @Test
+        void convertsWithCombinedTransforms() {
+            assertEquals("a{transform:rotate(30deg) scale(2)}",
+                CssMinifier.minify("a { transform: rotate3d(0, 0, 1, 30deg) scale(2); }"));
+        }
+
+        @Test
+        void convertsWebkitPrefixedRotate3d() {
+            assertEquals("a{-webkit-transform:rotateX(80deg)}",
+                CssMinifier.minify("a { -webkit-transform: rotate3d(1, 0, 0, 80deg); }"));
+        }
+    }
+
+    // ==================== KEYFRAME 100% → to ====================
+
+    @Nested
+    class Keyframe100ToTo {
+
+        @Test
+        void converts100PercentToTo() {
+            assertEquals("@keyframes a{0%{opacity:0}to{opacity:1}}",
+                CssMinifier.minify("@keyframes a { 0% { opacity: 0; } 100% { opacity: 1; } }"));
+        }
+
+        @Test
+        void preserves100PercentInCommaList() {
+            // 100% preceded by comma (not { or }) is left as-is for safety
+            assertEquals("@keyframes a{50%,100%{opacity:1}}",
+                CssMinifier.minify("@keyframes a { 50%, 100% { opacity: 1; } }"));
+        }
+
+        @Test
+        void doesNotConvert100PercentInPropertyValues() {
+            // 100% as a value (e.g., width:100%) should NOT become "to"
+            assertEquals("a{width:100%}",
+                CssMinifier.minify("a { width: 100%; }"));
+        }
+
+        @Test
+        void convertsBothFromAnd100Percent() {
+            assertEquals("@keyframes a{0%{opacity:0}to{opacity:1}}",
+                CssMinifier.minify("@keyframes a { from { opacity: 0; } 100% { opacity: 1; } }"));
+        }
+
+        @Test
+        void doesNotConvert100PercentInsideString() {
+            assertEquals("a{content:\"100%\"}",
+                CssMinifier.minify("a { content: \"100%\"; }"));
+        }
+    }
+
+    // ==================== CALC WHITESPACE ====================
+
+    @Nested
+    class CalcWhitespace {
+
+        @Test
+        void stripsSpaceAroundMultiply() {
+            assertEquals("a{width:calc(100%*2)}",
+                CssMinifier.minify("a { width: calc(100% * 2); }"));
+        }
+
+        @Test
+        void stripsSpaceAroundDivide() {
+            assertEquals("a{width:calc(100%/3)}",
+                CssMinifier.minify("a { width: calc(100% / 3); }"));
+        }
+
+        @Test
+        void preservesSpaceAroundPlusInCalc() {
+            assertEquals("a{width:calc(100% + 20px)}",
+                CssMinifier.minify("a { width: calc(100% + 20px); }"));
+        }
+
+        @Test
+        void preservesSpaceAroundMinusInCalc() {
+            assertEquals("a{width:calc(100% - 20px)}",
+                CssMinifier.minify("a { width: calc(100% - 20px); }"));
+        }
+
+        @Test
+        void stripsMultiplyInVarExpression() {
+            assertEquals("a{animation-delay:calc(var(--delay)*2)}",
+                CssMinifier.minify("a { animation-delay: calc(var(--delay) * 2); }"));
+        }
+
+        @Test
+        void doesNotStripSlashOutsideParens() {
+            // font shorthand uses / for line-height
+            assertEquals("a{font:16px/1.5 sans-serif}",
+                CssMinifier.minify("a { font: 16px/1.5 sans-serif; }"));
         }
     }
 
