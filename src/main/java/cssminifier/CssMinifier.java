@@ -14,6 +14,7 @@ public class CssMinifier {
         String result = stripComments(css);
         result = collapseWhitespace(result);
         result = optimizeValues(result);
+        result = optimizeQuotedTokens(result);
         result = collapseShorthand(result);
         result = removeDuplicateProperties(result);
         result = mergeAdjacentRules(result);
@@ -160,6 +161,26 @@ public class CssMinifier {
     private static final Pattern FONT_WEIGHT = Pattern.compile(
         "font-weight:(normal|bold)(?=[;}\"])");
 
+    // 6. Keyframe from → 0%
+    private static final Pattern KEYFRAME_FROM = Pattern.compile(
+        "\\bfrom(?=\\s*[{,])");
+
+    // 7. translate3d(0,0,0) → translateZ(0)
+    private static final Pattern TRANSLATE3D_ZERO = Pattern.compile(
+        "translate3d\\(0,\\s*0,\\s*0\\)");
+
+    // 8. scale3d(1,1,1) → scaleX(1)
+    private static final Pattern SCALE3D_IDENTITY = Pattern.compile(
+        "scale3d\\(1,\\s*1,\\s*1\\)");
+
+    // 9. background:transparent/none → background:0 0
+    private static final Pattern BACKGROUND_TRANSPARENT = Pattern.compile(
+        "background:(transparent|none)(?=[;},!])");
+
+    // 10. outline:none → outline:0
+    private static final Pattern OUTLINE_NONE = Pattern.compile(
+        "outline:none(?=[;},!])");
+
     static String optimizeValues(String css) {
         StringBuilder result = new StringBuilder(css.length());
         boolean inString = false;
@@ -257,7 +278,115 @@ public class CssMinifier {
         mfw.appendTail(sb);
         segment = sb.toString();
 
+        // 6. Keyframe from → 0%
+        segment = KEYFRAME_FROM.matcher(segment).replaceAll("0%");
+
+        // 7. translate3d(0,0,0) → translateZ(0)
+        segment = TRANSLATE3D_ZERO.matcher(segment).replaceAll("translateZ(0)");
+
+        // 8. scale3d(1,1,1) → scaleX(1)
+        segment = SCALE3D_IDENTITY.matcher(segment).replaceAll("scaleX(1)");
+
+        // 9. background:transparent/none → background:0 0
+        segment = BACKGROUND_TRANSPARENT.matcher(segment).replaceAll("background:0 0");
+
+        // 10. outline:none → outline:0
+        segment = OUTLINE_NONE.matcher(segment).replaceAll("outline:0");
+
         return segment;
+    }
+
+    /**
+     * Optimizes quoted tokens that span across what optimizeValues() considers string boundaries:
+     * attribute selector quotes and url() quotes.
+     */
+    static String optimizeQuotedTokens(String css) {
+        StringBuilder result = new StringBuilder(css.length());
+        boolean inString = false;
+        char stringChar = 0;
+        int i = 0;
+
+        while (i < css.length()) {
+            char c = css.charAt(i);
+
+            if (inString) {
+                result.append(c);
+                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                    inString = false;
+                }
+                i++;
+                continue;
+            }
+
+            // Try URL quote removal: url("...") → url(...)
+            if (c == 'u' && css.startsWith("url(", i)) {
+                int qPos = i + 4;
+                if (qPos < css.length()) {
+                    char q = css.charAt(qPos);
+                    if (q == '"' || q == '\'') {
+                        int closeQ = css.indexOf(q, qPos + 1);
+                        if (closeQ > 0 && closeQ + 1 < css.length() && css.charAt(closeQ + 1) == ')') {
+                            String content = css.substring(qPos + 1, closeQ);
+                            if (!content.isEmpty() && content.indexOf(' ') < 0
+                                    && content.indexOf('(') < 0 && content.indexOf(')') < 0) {
+                                result.append("url(").append(content).append(')');
+                                i = closeQ + 2;
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Try attribute selector quote removal: [attr="value"] → [attr=value]
+            if (c == '[') {
+                int j = i + 1;
+                // Skip attribute name (letters, digits, hyphens)
+                while (j < css.length() && (Character.isLetterOrDigit(css.charAt(j)) || css.charAt(j) == '-')) j++;
+                // Check for optional operator (^, $, *, ~, |)
+                if (j < css.length() && "^$*~|".indexOf(css.charAt(j)) >= 0) j++;
+                // Check for =
+                if (j < css.length() && css.charAt(j) == '=') {
+                    j++;
+                    if (j < css.length() && (css.charAt(j) == '"' || css.charAt(j) == '\'')) {
+                        char q = css.charAt(j);
+                        int closeQ = css.indexOf(q, j + 1);
+                        if (closeQ > 0 && closeQ + 1 < css.length() && css.charAt(closeQ + 1) == ']') {
+                            String value = css.substring(j + 1, closeQ);
+                            if (isValidCssIdentifier(value)) {
+                                result.append(css, i, j); // [attr=
+                                result.append(value);      // value without quotes
+                                result.append(']');
+                                i = closeQ + 2;
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Enter string mode for actual CSS strings
+            if (c == '"' || c == '\'') {
+                inString = true;
+                stringChar = c;
+            }
+
+            result.append(c);
+            i++;
+        }
+
+        return result.toString();
+    }
+
+    private static boolean isValidCssIdentifier(String value) {
+        if (value.isEmpty()) return false;
+        char first = value.charAt(0);
+        if (!Character.isLetter(first) && first != '_' && first != '-') return false;
+        for (int k = 1; k < value.length(); k++) {
+            char ch = value.charAt(k);
+            if (!Character.isLetterOrDigit(ch) && ch != '_' && ch != '-') return false;
+        }
+        return true;
     }
 
     private static final String[] SIDES = {"top", "right", "bottom", "left"};

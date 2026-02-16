@@ -431,7 +431,7 @@ class CssMinifierTest {
 
         @Test
         void handlesAttributeSelector() {
-            assertEquals("input[type=\"text\"]{color:red}",
+            assertEquals("input[type=text]{color:red}",
                 CssMinifier.minify("input[type=\"text\"] { color: red; }"));
         }
 
@@ -443,7 +443,7 @@ class CssMinifierTest {
 
         @Test
         void handlesAttributeSelectorContains() {
-            assertEquals("a[href*=\"example\"]{color:red}",
+            assertEquals("a[href*=example]{color:red}",
                 CssMinifier.minify("a[href*=\"example\"] { color: red; }"));
         }
 
@@ -514,7 +514,7 @@ class CssMinifierTest {
                         }
                     }
                     """;
-            assertEquals("@keyframes fadeIn{from{opacity:0}to{opacity:1}}", CssMinifier.minify(input));
+            assertEquals("@keyframes fadeIn{0%{opacity:0}to{opacity:1}}", CssMinifier.minify(input));
         }
 
         @Test
@@ -545,13 +545,13 @@ class CssMinifierTest {
                         src: url("font.woff2") format("woff2");
                     }
                     """;
-            assertEquals("@font-face{font-family:\"MyFont\";src:url(\"font.woff2\") format(\"woff2\")}",
+            assertEquals("@font-face{font-family:\"MyFont\";src:url(font.woff2) format(\"woff2\")}",
                 CssMinifier.minify(input));
         }
 
         @Test
         void handlesImport() {
-            assertEquals("@import url(\"style.css\");",
+            assertEquals("@import url(style.css);",
                 CssMinifier.minify("@import url(\"style.css\");"));
         }
 
@@ -708,7 +708,7 @@ class CssMinifierTest {
 
         @Test
         void handlesUrlWithQuotes() {
-            assertEquals("a{background:url(\"image.png\")}",
+            assertEquals("a{background:url(image.png)}",
                 CssMinifier.minify("a { background: url(\"image.png\"); }"));
         }
 
@@ -880,7 +880,7 @@ class CssMinifierTest {
         @Test
         void handlesDataUri() {
             String input = "a { background: url(\"data:image/png;base64,iVBOR\"); }";
-            assertEquals("a{background:url(\"data:image/png;base64,iVBOR\")}", CssMinifier.minify(input));
+            assertEquals("a{background:url(data:image/png;base64,iVBOR)}", CssMinifier.minify(input));
         }
 
         @Test
@@ -1077,10 +1077,10 @@ class CssMinifierTest {
                     }
                     """;
             assertEquals(
-                "input[type=\"text\"],input[type=\"email\"],textarea" +
+                "input[type=text],input[type=email],textarea" +
                 "{width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:4px;font-size:14px}" +
-                "input[type=\"text\"]:focus,input[type=\"email\"]:focus,textarea:focus" +
-                "{outline:none;border-color:#007bff;box-shadow:0 0 0 3px rgba(0,123,255,.25)}",
+                "input[type=text]:focus,input[type=email]:focus,textarea:focus" +
+                "{outline:0;border-color:#007bff;box-shadow:0 0 0 3px rgba(0,123,255,.25)}",
                 CssMinifier.minify(input));
         }
 
@@ -1486,7 +1486,7 @@ class CssMinifierTest {
                         }
                     }
                     """;
-            assertEquals("@keyframes slide{from{margin-left:0}to{margin-left:100px}}",
+            assertEquals("@keyframes slide{0%{margin-left:0}to{margin-left:100px}}",
                 CssMinifier.minify(input));
         }
 
@@ -2335,6 +2335,346 @@ class CssMinifierTest {
             // "h1,h2" and "h1, h2" should be treated the same after minification
             assertEquals("h1,h2{color:red;font-size:12px}",
                 CssMinifier.minify("h1, h2 { color: red; } h1,h2 { font-size: 12px; }"));
+        }
+    }
+
+    // ==================== KEYFRAME FROM → 0% ====================
+
+    @Nested
+    class KeyframeFromTo {
+
+        @Test
+        void convertsFromToZeroPercent() {
+            assertEquals("@keyframes a{0%{opacity:0}to{opacity:1}}",
+                CssMinifier.minify("@keyframes a { from { opacity: 0; } to { opacity: 1; } }"));
+        }
+
+        @Test
+        void convertsFromBeforeBrace() {
+            assertEquals("@keyframes a{0%{opacity:0}}",
+                CssMinifier.minify("@keyframes a { from { opacity: 0; } }"));
+        }
+
+        @Test
+        void convertsFromInCommaList() {
+            assertEquals("@keyframes a{0%,to{opacity:1}}",
+                CssMinifier.minify("@keyframes a { from, to { opacity: 1; } }"));
+        }
+
+        @Test
+        void doesNotConvertToKeyword() {
+            // "to" should stay as "to" (100% is longer)
+            assertEquals("@keyframes a{to{opacity:1}}",
+                CssMinifier.minify("@keyframes a { to { opacity: 1; } }"));
+        }
+
+        @Test
+        void doesNotAffectFromInPropertyValues() {
+            // "from" inside a value like gradient shouldn't be touched
+            // gradient from keyword is followed by a space and color, not { or ,
+            assertEquals("a{background:linear-gradient(from 45deg,red,blue)}",
+                CssMinifier.minify("a { background: linear-gradient(from 45deg, red, blue); }"));
+        }
+
+        @Test
+        void doesNotAffectFromInsideString() {
+            assertEquals("a{content:\"from here\"}",
+                CssMinifier.minify("a { content: \"from here\"; }"));
+        }
+
+        @Test
+        void handlesMultipleFromKeyframes() {
+            String input = "@keyframes a { from { opacity: 0; } to { opacity: 1; } } " +
+                "@keyframes b { from { color: red; } to { color: blue; } }";
+            String result = CssMinifier.minify(input);
+            // Both "from" should become "0%"
+            assertFalse(result.contains("from{") || result.contains("from,"));
+            assertTrue(result.contains("0%{") || result.contains("0%,"));
+        }
+
+        @Test
+        void preservesZeroPercentKeyframeSelector() {
+            // 0% should stay as 0% (already short)
+            assertEquals("@keyframes a{0%{opacity:0}to{opacity:1}}",
+                CssMinifier.minify("@keyframes a { 0% { opacity: 0; } to { opacity: 1; } }"));
+        }
+    }
+
+    // ==================== TRANSFORM 3D SIMPLIFICATION ====================
+
+    @Nested
+    class Transform3dSimplification {
+
+        @Test
+        void convertsTranslate3dZeroToTranslateZ() {
+            assertEquals("a{transform:translateZ(0)}",
+                CssMinifier.minify("a { transform: translate3d(0, 0, 0); }"));
+        }
+
+        @Test
+        void doesNotConvertTranslate3dWithNonZeroArgs() {
+            assertEquals("a{transform:translate3d(100%,0,0)}",
+                CssMinifier.minify("a { transform: translate3d(100%, 0, 0); }"));
+        }
+
+        @Test
+        void doesNotConvertTranslate3dWithNonZeroSecondArg() {
+            assertEquals("a{transform:translate3d(0,50px,0)}",
+                CssMinifier.minify("a { transform: translate3d(0, 50px, 0); }"));
+        }
+
+        @Test
+        void doesNotConvertTranslate3dWithNonZeroThirdArg() {
+            assertEquals("a{transform:translate3d(0,0,10px)}",
+                CssMinifier.minify("a { transform: translate3d(0, 0, 10px); }"));
+        }
+
+        @Test
+        void convertsScale3dIdentityToScaleX() {
+            assertEquals("a{transform:scaleX(1)}",
+                CssMinifier.minify("a { transform: scale3d(1, 1, 1); }"));
+        }
+
+        @Test
+        void doesNotConvertScale3dWithNonIdentityArgs() {
+            assertEquals("a{transform:scale3d(.5,.5,.5)}",
+                CssMinifier.minify("a { transform: scale3d(0.5, 0.5, 0.5); }"));
+        }
+
+        @Test
+        void doesNotAffectTranslate3dInsideString() {
+            assertEquals("a{content:\"translate3d(0,0,0)\"}",
+                CssMinifier.minify("a { content: \"translate3d(0,0,0)\"; }"));
+        }
+
+        @Test
+        void handlesCombinedTransforms() {
+            assertEquals("a{transform:translateZ(0) rotate(45deg)}",
+                CssMinifier.minify("a { transform: translate3d(0, 0, 0) rotate(45deg); }"));
+        }
+
+        @Test
+        void handlesMultipleTranslate3dInOneRule() {
+            assertEquals("a{transform:translateZ(0)}b{transform:translateZ(0)}",
+                CssMinifier.minify("a { transform: translate3d(0, 0, 0); } b { transform: translate3d(0, 0, 0); }"));
+        }
+
+        @Test
+        void convertsWebkitTranslate3dZero() {
+            assertEquals("a{-webkit-transform:translateZ(0)}",
+                CssMinifier.minify("a { -webkit-transform: translate3d(0, 0, 0); }"));
+        }
+    }
+
+    // ==================== BACKGROUND SHORTHAND ====================
+
+    @Nested
+    class BackgroundShorthand {
+
+        @Test
+        void convertsBackgroundTransparent() {
+            assertEquals("a{background:0 0}",
+                CssMinifier.minify("a { background: transparent; }"));
+        }
+
+        @Test
+        void convertsBackgroundNone() {
+            assertEquals("a{background:0 0}",
+                CssMinifier.minify("a { background: none; }"));
+        }
+
+        @Test
+        void convertsBackgroundTransparentWithImportant() {
+            assertEquals("a{background:0 0!important}",
+                CssMinifier.minify("a { background: transparent !important; }"));
+        }
+
+        @Test
+        void convertsBackgroundNoneWithImportant() {
+            assertEquals("a{background:0 0!important}",
+                CssMinifier.minify("a { background: none !important; }"));
+        }
+
+        @Test
+        void doesNotConvertBackgroundColorTransparent() {
+            // background-color is a different property, should not be converted
+            assertEquals("a{background-color:transparent}",
+                CssMinifier.minify("a { background-color: transparent; }"));
+        }
+
+        @Test
+        void doesNotAffectBackgroundTransparentInsideString() {
+            assertEquals("a{content:\"background:transparent\"}",
+                CssMinifier.minify("a { content: \"background:transparent\"; }"));
+        }
+
+        @Test
+        void convertsBackgroundTransparentBeforeClosingBrace() {
+            assertEquals("a{background:0 0}",
+                CssMinifier.minify("a { background: transparent; }"));
+        }
+
+        @Test
+        void doesNotConvertBackgroundWithOtherValues() {
+            // background: transparent url(...) — not just transparent
+            assertEquals("a{background:transparent url(bg.png)}",
+                CssMinifier.minify("a { background: transparent url(bg.png); }"));
+        }
+    }
+
+    // ==================== OUTLINE SHORTHAND ====================
+
+    @Nested
+    class OutlineShorthand {
+
+        @Test
+        void convertsOutlineNone() {
+            assertEquals("a{outline:0}",
+                CssMinifier.minify("a { outline: none; }"));
+        }
+
+        @Test
+        void convertsOutlineNoneWithImportant() {
+            assertEquals("a{outline:0!important}",
+                CssMinifier.minify("a { outline: none !important; }"));
+        }
+
+        @Test
+        void doesNotConvertOutlineWithOtherValues() {
+            assertEquals("a{outline:1px solid red}",
+                CssMinifier.minify("a { outline: 1px solid red; }"));
+        }
+
+        @Test
+        void doesNotAffectOutlineInsideString() {
+            assertEquals("a{content:\"outline:none\"}",
+                CssMinifier.minify("a { content: \"outline:none\"; }"));
+        }
+
+        @Test
+        void convertsOutlineNoneBeforeClosingBrace() {
+            assertEquals("a{color:red;outline:0}",
+                CssMinifier.minify("a { color: red; outline: none; }"));
+        }
+    }
+
+    // ==================== ATTRIBUTE SELECTOR QUOTE REMOVAL ====================
+
+    @Nested
+    class AttributeSelectorQuotes {
+
+        @Test
+        void removesDoubleQuotesFromSimpleIdentifier() {
+            assertEquals("[type=text]{color:red}",
+                CssMinifier.minify("[type=\"text\"] { color: red; }"));
+        }
+
+        @Test
+        void removesSingleQuotesFromSimpleIdentifier() {
+            assertEquals("[type=text]{color:red}",
+                CssMinifier.minify("[type='text'] { color: red; }"));
+        }
+
+        @Test
+        void preservesQuotesWhenValueContainsSpace() {
+            assertEquals("[data-value=\"hello world\"]{color:red}",
+                CssMinifier.minify("[data-value=\"hello world\"] { color: red; }"));
+        }
+
+        @Test
+        void preservesQuotesWhenValueStartsWithDigit() {
+            assertEquals("[data-id=\"123\"]{color:red}",
+                CssMinifier.minify("[data-id=\"123\"] { color: red; }"));
+        }
+
+        @Test
+        void preservesQuotesWhenValueIsEmpty() {
+            assertEquals("[data-value=\"\"]{color:red}",
+                CssMinifier.minify("[data-value=\"\"] { color: red; }"));
+        }
+
+        @Test
+        void removesQuotesWithSubstringMatcher() {
+            assertEquals("[href*=example]{color:red}",
+                CssMinifier.minify("[href*=\"example\"] { color: red; }"));
+        }
+
+        @Test
+        void removesQuotesWithPrefixMatcher() {
+            assertEquals("[class^=btn]{color:red}",
+                CssMinifier.minify("[class^=\"btn\"] { color: red; }"));
+        }
+
+        @Test
+        void removesQuotesWithSuffixMatcher() {
+            assertEquals("[class$=active]{color:red}",
+                CssMinifier.minify("[class$=\"active\"] { color: red; }"));
+        }
+
+        @Test
+        void removesQuotesWithHyphenMatcher() {
+            assertEquals("[lang|=en]{color:red}",
+                CssMinifier.minify("[lang|=\"en\"] { color: red; }"));
+        }
+
+        @Test
+        void doesNotAffectAttributeSelectorsInsideString() {
+            assertEquals("a{content:\"[type='text']\"}",
+                CssMinifier.minify("a { content: \"[type='text']\"; }"));
+        }
+    }
+
+    // ==================== URL QUOTE REMOVAL ====================
+
+    @Nested
+    class UrlQuotes {
+
+        @Test
+        void removesDoubleQuotesFromUrl() {
+            assertEquals("a{background:url(image.png)}",
+                CssMinifier.minify("a { background: url(\"image.png\"); }"));
+        }
+
+        @Test
+        void removesSingleQuotesFromUrl() {
+            assertEquals("a{background:url(font.woff2)}",
+                CssMinifier.minify("a { background: url('font.woff2'); }"));
+        }
+
+        @Test
+        void preservesQuotesWhenUrlContainsSpaces() {
+            assertEquals("a{background:url(\"path with spaces.png\")}",
+                CssMinifier.minify("a { background: url(\"path with spaces.png\"); }"));
+        }
+
+        @Test
+        void preservesQuotesWhenUrlContainsParens() {
+            assertEquals("a{background:url(\"file(1).png\")}",
+                CssMinifier.minify("a { background: url(\"file(1).png\"); }"));
+        }
+
+        @Test
+        void removesQuotesFromDataUri() {
+            assertEquals("a{background:url(data:image/png;base64,abc123)}",
+                CssMinifier.minify("a { background: url(\"data:image/png;base64,abc123\"); }"));
+        }
+
+        @Test
+        void doesNotAffectUrlInsideString() {
+            assertEquals("a{content:\"url('image.png')\"}",
+                CssMinifier.minify("a { content: \"url('image.png')\"; }"));
+        }
+
+        @Test
+        void removesQuotesFromMultipleUrls() {
+            String result = CssMinifier.minify("a { background: url(\"a.png\"); } b { background: url(\"b.png\"); }");
+            assertEquals("a{background:url(a.png)}b{background:url(b.png)}", result);
+        }
+
+        @Test
+        void removesQuotesFromFontFaceSrc() {
+            assertEquals("@font-face{src:url(font.woff2) format(woff2)}",
+                CssMinifier.minify("@font-face { src: url(\"font.woff2\") format(woff2); }"));
         }
     }
 
