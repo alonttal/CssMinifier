@@ -11,7 +11,13 @@ import java.util.regex.Pattern;
 public class CssMinifier {
 
     public static String minify(String css) {
-        return collapseShorthand(optimizeValues(collapseWhitespace(stripComments(css))));
+        String result = stripComments(css);
+        result = collapseWhitespace(result);
+        result = optimizeValues(result);
+        result = collapseShorthand(result);
+        result = removeDuplicateProperties(result);
+        result = mergeAdjacentRules(result);
+        return result;
     }
 
     private static String stripComments(String css) {
@@ -25,6 +31,15 @@ public class CssMinifier {
             char next = i + 1 < css.length() ? css.charAt(i + 1) : 0;
 
             if (!inString && !inComment && c == '/' && next == '*') {
+                // Check for /*! license comment — preserve it
+                if (i + 2 < css.length() && css.charAt(i + 2) == '!') {
+                    int end = css.indexOf("*/", i + 3);
+                    if (end != -1) {
+                        result.append(css, i, end + 2);
+                        i = end + 1; // will be incremented by loop
+                        continue;
+                    }
+                }
                 inComment = true;
                 i++;
                 continue;
@@ -55,15 +70,24 @@ public class CssMinifier {
         return result.toString();
     }
 
-    private static boolean isStripChar(char c) {
-        return c == '{' || c == '}' || c == ';' || c == ':' || c == ','
-            || c == '>' || c == '+' || c == '~';
+    private static boolean isStripChar(char c, int braceDepth, int parenDepth) {
+        // Always strip around these
+        if (c == '{' || c == '}' || c == ';' || c == ',') return true;
+        // Strip around ':' inside declarations (braces) or inside parens (media queries, @supports)
+        // but NOT in selectors where it precedes pseudo-classes
+        if (c == ':' && (braceDepth > 0 || parenDepth > 0)) return true;
+        // Strip around combinators '>' '+' '~' only outside parentheses
+        // (inside parens, '+' and '-' are math operators in calc/min/max/clamp)
+        if ((c == '>' || c == '+' || c == '~') && parenDepth == 0) return true;
+        return false;
     }
 
     private static String collapseWhitespace(String css) {
         StringBuilder result = new StringBuilder(css.length());
         boolean inString = false;
         char stringChar = 0;
+        int braceDepth = 0;
+        int parenDepth = 0;
 
         for (int i = 0; i < css.length(); i++) {
             char c = css.charAt(i);
@@ -82,15 +106,21 @@ public class CssMinifier {
                 continue;
             }
 
+            // Track brace and paren depth
+            if (c == '{') braceDepth++;
+            else if (c == '}') braceDepth--;
+            else if (c == '(') parenDepth++;
+            else if (c == ')') parenDepth--;
+
             if (Character.isWhitespace(c)) {
                 char prev = result.length() > 0 ? result.charAt(result.length() - 1) : 0;
-                if (isStripChar(prev)) {
+                if (isStripChar(prev, braceDepth, parenDepth)) {
                     continue;
                 }
                 int j = i + 1;
                 while (j < css.length() && Character.isWhitespace(css.charAt(j))) j++;
                 char nextNonWs = j < css.length() ? css.charAt(j) : 0;
-                if (isStripChar(nextNonWs)) {
+                if (isStripChar(nextNonWs, braceDepth, parenDepth)) {
                     continue;
                 }
                 if (prev != ' ' && prev != 0) {
@@ -121,6 +151,9 @@ public class CssMinifier {
 
     private static final Pattern ZERO_UNIT = Pattern.compile(
         "(?<=[:\\s,(/])0(px|em|rem|pt|cm|mm|in|pc|ex|ch|vw|vh|vmin|vmax|deg|rad|turn|ms|s|%)(?![0-9a-zA-Z%])");
+
+    private static final Pattern LEADING_ZERO = Pattern.compile(
+        "(?<=[:\\s,(/\\-])0(\\.\\d+)");
 
     private static final Pattern FONT_WEIGHT = Pattern.compile(
         "font-weight:(normal|bold)(?=[;}\"])");
@@ -203,7 +236,16 @@ public class CssMinifier {
         mz.appendTail(sb);
         segment = sb.toString();
 
-        // 4. Shorten font-weight keywords
+        // 4. Remove leading zeros from decimals (0.25 -> .25)
+        Matcher mlz = LEADING_ZERO.matcher(segment);
+        sb = new StringBuilder();
+        while (mlz.find()) {
+            mlz.appendReplacement(sb, Matcher.quoteReplacement(mlz.group(1)));
+        }
+        mlz.appendTail(sb);
+        segment = sb.toString();
+
+        // 5. Shorten font-weight keywords
         Matcher mfw = FONT_WEIGHT.matcher(segment);
         sb = new StringBuilder();
         while (mfw.find()) {
@@ -342,6 +384,205 @@ public class CssMinifier {
         }
 
         return block;
+    }
+
+    static String removeDuplicateProperties(String css) {
+        StringBuilder result = new StringBuilder(css.length());
+        boolean inString = false;
+        char stringChar = 0;
+        int i = 0;
+
+        while (i < css.length()) {
+            char c = css.charAt(i);
+
+            if (inString) {
+                result.append(c);
+                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                    inString = false;
+                }
+                i++;
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                inString = true;
+                stringChar = c;
+                result.append(c);
+                i++;
+                continue;
+            }
+
+            if (c == '{') {
+                int braceDepth = 1;
+                int blockStart = i + 1;
+                int j = blockStart;
+                boolean bInString = false;
+                char bStringChar = 0;
+                while (j < css.length() && braceDepth > 0) {
+                    char bc = css.charAt(j);
+                    if (bInString) {
+                        if (bc == bStringChar && css.charAt(j - 1) != '\\') bInString = false;
+                    } else if (bc == '"' || bc == '\'') {
+                        bInString = true;
+                        bStringChar = bc;
+                    } else if (bc == '{') {
+                        braceDepth++;
+                    } else if (bc == '}') {
+                        braceDepth--;
+                    }
+                    j++;
+                }
+                int blockEnd = j - 1;
+                String block = css.substring(blockStart, blockEnd);
+
+                if (block.contains("{")) {
+                    block = removeDuplicateProperties(block);
+                } else {
+                    block = deduplicateBlock(block);
+                }
+
+                result.append('{');
+                result.append(block);
+                result.append('}');
+                i = blockEnd + 1;
+                continue;
+            }
+
+            result.append(c);
+            i++;
+        }
+
+        return result.toString();
+    }
+
+    private static String deduplicateBlock(String block) {
+        if (block.isEmpty()) return block;
+
+        String[] declarations = block.split(";");
+        LinkedHashMap<String, String> props = new LinkedHashMap<>();
+        for (String decl : declarations) {
+            int colon = decl.indexOf(':');
+            if (colon > 0) {
+                String prop = decl.substring(0, colon);
+                String value = decl.substring(colon + 1);
+                props.put(prop, value);
+            } else if (!decl.isEmpty()) {
+                // No colon — preserve as-is (shouldn't happen in well-formed CSS)
+                props.put(decl, null);
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            if (sb.length() > 0) sb.append(';');
+            sb.append(entry.getKey());
+            if (entry.getValue() != null) {
+                sb.append(':').append(entry.getValue());
+            }
+        }
+        return sb.toString();
+    }
+
+    static String mergeAdjacentRules(String css) {
+        StringBuilder result = new StringBuilder(css.length());
+        boolean inString = false;
+        char stringChar = 0;
+        int i = 0;
+
+        String prevSelector = null;
+        int prevBodyStart = -1; // index in result where previous rule's body starts (after '{')
+
+        while (i < css.length()) {
+            char c = css.charAt(i);
+
+            if (inString) {
+                result.append(c);
+                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                    inString = false;
+                }
+                i++;
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                inString = true;
+                stringChar = c;
+                result.append(c);
+                i++;
+                continue;
+            }
+
+            if (c == '{') {
+                // Find matching close brace
+                int braceDepth = 1;
+                int blockStart = i + 1;
+                int j = blockStart;
+                boolean bInString = false;
+                char bStringChar = 0;
+                while (j < css.length() && braceDepth > 0) {
+                    char bc = css.charAt(j);
+                    if (bInString) {
+                        if (bc == bStringChar && css.charAt(j - 1) != '\\') bInString = false;
+                    } else if (bc == '"' || bc == '\'') {
+                        bInString = true;
+                        bStringChar = bc;
+                    } else if (bc == '{') {
+                        braceDepth++;
+                    } else if (bc == '}') {
+                        braceDepth--;
+                    }
+                    j++;
+                }
+                int blockEnd = j - 1;
+                String body = css.substring(blockStart, blockEnd);
+
+                // Extract selector: everything from the end of previous rule to this '{'
+                // The selector is what's currently buffered since the last '}' or start
+                String selector = extractTrailingSelector(result);
+
+                if (selector != null && selector.equals(prevSelector) && prevBodyStart >= 0
+                        && !body.contains("{")) {
+                    // Merge: remove the '}' that closed previous rule and the selector chars
+                    // result currently = "...prevBody}selector"
+                    // We want to cut back to "...prevBody", then append ";newBody}"
+                    result.setLength(result.length() - selector.length() - 1);
+                    result.append(';').append(body).append('}');
+                    // prevBodyStart stays the same, prevSelector stays the same
+                } else {
+                    // Normal rule — write it
+                    result.append('{');
+                    prevBodyStart = result.length();
+                    prevSelector = selector;
+                    result.append(body);
+                    result.append('}');
+                }
+
+                i = blockEnd + 1;
+                continue;
+            }
+
+            result.append(c);
+            i++;
+        }
+
+        return result.toString();
+    }
+
+    private static String extractTrailingSelector(StringBuilder sb) {
+        // Walk backward from end of sb to find the selector
+        // Selector ends at the current position and starts after the last '}' or at index 0
+        int end = sb.length();
+        int start = end;
+        for (int k = end - 1; k >= 0; k--) {
+            if (sb.charAt(k) == '}') {
+                start = k + 1;
+                break;
+            }
+            if (k == 0) {
+                start = 0;
+            }
+        }
+        if (start >= end) return null;
+        String sel = sb.substring(start, end).trim();
+        return sel.isEmpty() ? null : sel;
     }
 
     public static void main(String[] args) throws IOException {
