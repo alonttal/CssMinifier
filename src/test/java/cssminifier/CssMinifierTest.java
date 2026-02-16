@@ -1,0 +1,1209 @@
+package cssminifier;
+
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+class CssMinifierTest {
+
+    // ==================== COMMENTS ====================
+
+    @Nested
+    class Comments {
+
+        @Test
+        void removesInlineComment() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { /* text color */ color: red; }"));
+        }
+
+        @Test
+        void removesMultilineComment() {
+            String input = """
+                    /*
+                     * Reset styles
+                     */
+                    body {
+                        margin: 0;
+                    }
+                    """;
+            assertEquals("body{margin:0}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void removesEmptyComment() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { /**/ color: red; }"));
+        }
+
+        @Test
+        void removesCommentAtStart() {
+            assertEquals("a{color:red}", CssMinifier.minify("/* comment */ a { color: red; }"));
+        }
+
+        @Test
+        void removesCommentAtEnd() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color: red; } /* comment */"));
+        }
+
+        @Test
+        void removesAdjacentComments() {
+            assertEquals("a{color:red}", CssMinifier.minify("/* one */ /* two */ a { color: red; }"));
+        }
+
+        @Test
+        void removesCommentBetweenRules() {
+            assertEquals("a{color:red}b{color:blue}",
+                CssMinifier.minify("a { color: red; } /* separator */ b { color: blue; }"));
+        }
+
+        @Test
+        void removesCommentBetweenProperties() {
+            assertEquals("a{color:red;font-size:12px}",
+                CssMinifier.minify("a { color: red; /* break */ font-size: 12px; }"));
+        }
+
+        @Test
+        void removesCommentBetweenSelectorAndBrace() {
+            assertEquals("a{color:red}", CssMinifier.minify("a /* comment */ { color: red; }"));
+        }
+
+        @Test
+        void removesCommentInsidePropertyValue() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color: /* bright */ red; }"));
+        }
+
+        @Test
+        void removesCommentBetweenPropertyAndColon() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color /* x */ : red; }"));
+        }
+
+        @Test
+        void handlesCommentOnlyInput() {
+            assertEquals("", CssMinifier.minify("/* just a comment */"));
+        }
+
+        @Test
+        void handlesMultipleCommentOnlyInput() {
+            assertEquals("", CssMinifier.minify("/* one */ /* two */ /* three */"));
+        }
+
+        @Test
+        void handlesCommentWithAsterisks() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { /*** stars ***/ color: red; }"));
+        }
+
+        @Test
+        void doesNotTreatDoubleSlashAsComment() {
+            // CSS does not have // line comments
+            assertEquals("a{color:red}//not a comment",
+                CssMinifier.minify("a { color: red; } //not a comment"));
+        }
+
+        @Test
+        void preservesCommentLikeContentInDoubleQuotedString() {
+            assertEquals("a{content:\"/* not a comment */\"}",
+                CssMinifier.minify("a { content: \"/* not a comment */\"; }"));
+        }
+
+        @Test
+        void preservesCommentLikeContentInSingleQuotedString() {
+            assertEquals("a{content:'/* not a comment */'}",
+                CssMinifier.minify("a { content: '/* not a comment */'; }"));
+        }
+    }
+
+    // ==================== WHITESPACE ====================
+
+    @Nested
+    class Whitespace {
+
+        @Test
+        void collapsesMultipleSpaces() {
+            assertEquals("a{color:red}", CssMinifier.minify("a  {  color :  red  }"));
+        }
+
+        @Test
+        void removesLeadingWhitespace() {
+            assertEquals("a{color:red}", CssMinifier.minify("   a { color: red; }"));
+        }
+
+        @Test
+        void removesTrailingWhitespace() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color: red; }   "));
+        }
+
+        @Test
+        void removesNewlines() {
+            assertEquals("a{color:red}", CssMinifier.minify("a {\ncolor:\nred;\n}"));
+        }
+
+        @Test
+        void removesTabs() {
+            assertEquals("a{color:red}", CssMinifier.minify("a {\n\tcolor:\n\t\tred;\n}"));
+        }
+
+        @Test
+        void removesCarriageReturns() {
+            assertEquals("a{color:red}", CssMinifier.minify("a {\r\n\tcolor: red;\r\n}"));
+        }
+
+        @Test
+        void removesMixedWhitespace() {
+            assertEquals("a{color:red}", CssMinifier.minify("a \t\n { \r\n color : \t red ; \n }"));
+        }
+
+        @Test
+        void removesWhitespaceBeforeOpenBrace() {
+            assertEquals("a{color:red}", CssMinifier.minify("a   {color: red;}"));
+        }
+
+        @Test
+        void removesWhitespaceAfterOpenBrace() {
+            assertEquals("a{color:red}", CssMinifier.minify("a{   color: red;}"));
+        }
+
+        @Test
+        void removesWhitespaceBeforeCloseBrace() {
+            assertEquals("a{color:red}", CssMinifier.minify("a{color: red   }"));
+        }
+
+        @Test
+        void removesWhitespaceAfterCloseBrace() {
+            assertEquals("a{color:red}b{color:blue}",
+                CssMinifier.minify("a{color: red;}   b{color: blue;}"));
+        }
+
+        @Test
+        void removesWhitespaceBeforeColon() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color : red; }"));
+        }
+
+        @Test
+        void removesWhitespaceAfterColon() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color:   red; }"));
+        }
+
+        @Test
+        void removesWhitespaceBeforeSemicolon() {
+            assertEquals("a{color:red;font-size:12px}",
+                CssMinifier.minify("a { color: red ; font-size: 12px ; }"));
+        }
+
+        @Test
+        void removesWhitespaceAfterSemicolon() {
+            assertEquals("a{color:red;font-size:12px}",
+                CssMinifier.minify("a { color: red;   font-size: 12px; }"));
+        }
+
+        @Test
+        void removesWhitespaceAroundComma() {
+            assertEquals("a,b,c{color:red}",
+                CssMinifier.minify("a , b , c { color: red; }"));
+        }
+
+        @Test
+        void handlesOnlyWhitespace() {
+            assertEquals("", CssMinifier.minify("   \t\n\r  "));
+        }
+
+        @Test
+        void preservesSpaceBetweenSelectorParts() {
+            assertEquals("div p{color:red}", CssMinifier.minify("div p { color: red; }"));
+        }
+
+        @Test
+        void preservesSingleSpaceBetweenMultipleSelectorParts() {
+            assertEquals("div ul li{color:red}", CssMinifier.minify("div   ul   li { color: red; }"));
+        }
+
+        @Test
+        void preservesSpaceInPropertyValues() {
+            assertEquals("a{margin:10px 20px}", CssMinifier.minify("a { margin: 10px 20px; }"));
+        }
+
+        @Test
+        void preservesSpaceInMultiWordValues() {
+            assertEquals("a{font-family:\"Times New Roman\",serif}",
+                CssMinifier.minify("a { font-family: \"Times New Roman\", serif; }"));
+        }
+
+        @Test
+        void preservesSpaceInFourValueShorthand() {
+            assertEquals("a{margin:1px 2px 3px 4px}",
+                CssMinifier.minify("a { margin: 1px 2px 3px 4px; }"));
+        }
+    }
+
+    // ==================== SEMICOLONS ====================
+
+    @Nested
+    class Semicolons {
+
+        @Test
+        void removesTrailingSemicolonSingleProperty() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color: red; }"));
+        }
+
+        @Test
+        void removesTrailingSemicolonMultipleProperties() {
+            assertEquals("a{color:red;font-size:12px}",
+                CssMinifier.minify("a { color: red; font-size: 12px; }"));
+        }
+
+        @Test
+        void handlesNoTrailingSemicolon() {
+            assertEquals("a{color:red}", CssMinifier.minify("a { color: red }"));
+        }
+
+        @Test
+        void preservesMiddleSemicolons() {
+            assertEquals("a{color:red;font-size:12px;display:block}",
+                CssMinifier.minify("a { color: red; font-size: 12px; display: block; }"));
+        }
+
+        @Test
+        void removesTrailingSemicolonInNestedBlocks() {
+            String input = """
+                    @media screen {
+                        a {
+                            color: red;
+                        }
+                    }
+                    """;
+            assertEquals("@media screen{a{color:red}}", CssMinifier.minify(input));
+        }
+    }
+
+    // ==================== STRINGS ====================
+
+    @Nested
+    class Strings {
+
+        @Test
+        void preservesDoubleQuotedString() {
+            assertEquals("a{content:\"hello world\"}",
+                CssMinifier.minify("a { content: \"hello world\"; }"));
+        }
+
+        @Test
+        void preservesSingleQuotedString() {
+            assertEquals("a{content:'hello world'}",
+                CssMinifier.minify("a { content: 'hello world'; }"));
+        }
+
+        @Test
+        void preservesSpacesInDoubleQuotedString() {
+            assertEquals("a{content:\"  lots   of   spaces  \"}",
+                CssMinifier.minify("a { content: \"  lots   of   spaces  \"; }"));
+        }
+
+        @Test
+        void preservesSpacesInSingleQuotedString() {
+            assertEquals("a{content:'  lots   of   spaces  '}",
+                CssMinifier.minify("a { content: '  lots   of   spaces  '; }"));
+        }
+
+        @Test
+        void preservesEmptyDoubleQuotedString() {
+            assertEquals("a{content:\"\"}", CssMinifier.minify("a { content: \"\"; }"));
+        }
+
+        @Test
+        void preservesEmptySingleQuotedString() {
+            assertEquals("a{content:''}", CssMinifier.minify("a { content: ''; }"));
+        }
+
+        @Test
+        void preservesEscapedQuoteInDoubleQuotedString() {
+            assertEquals("a{content:\"he said \\\"hi\\\"\"}",
+                CssMinifier.minify("a { content: \"he said \\\"hi\\\"\"; }"));
+        }
+
+        @Test
+        void preservesEscapedQuoteInSingleQuotedString() {
+            assertEquals("a{content:'it\\'s fine'}",
+                CssMinifier.minify("a { content: 'it\\'s fine'; }"));
+        }
+
+        @Test
+        void preservesBracesInsideString() {
+            assertEquals("a{content:\"{ not a block }\"}",
+                CssMinifier.minify("a { content: \"{ not a block }\"; }"));
+        }
+
+        @Test
+        void preservesSemicolonInsideString() {
+            assertEquals("a{content:\"a; b; c\"}",
+                CssMinifier.minify("a { content: \"a; b; c\"; }"));
+        }
+
+        @Test
+        void preservesColonInsideString() {
+            assertEquals("a{content:\"key: value\"}",
+                CssMinifier.minify("a { content: \"key: value\"; }"));
+        }
+
+        @Test
+        void handlesMultipleStringsInOneRule() {
+            assertEquals("a{content:\"hello\" \"world\"}",
+                CssMinifier.minify("a { content: \"hello\" \"world\"; }"));
+        }
+
+        @Test
+        void preservesNewlinesInString() {
+            assertEquals("a{content:\"line1\\nline2\"}",
+                CssMinifier.minify("a { content: \"line1\\nline2\"; }"));
+        }
+    }
+
+    // ==================== SELECTORS ====================
+
+    @Nested
+    class Selectors {
+
+        @Test
+        void handlesClassSelector() {
+            assertEquals(".foo{color:red}", CssMinifier.minify(".foo { color: red; }"));
+        }
+
+        @Test
+        void handlesIdSelector() {
+            assertEquals("#bar{color:red}", CssMinifier.minify("#bar { color: red; }"));
+        }
+
+        @Test
+        void handlesUniversalSelector() {
+            assertEquals("*{margin:0}", CssMinifier.minify("* { margin: 0; }"));
+        }
+
+        @Test
+        void handlesElementSelector() {
+            assertEquals("div{color:red}", CssMinifier.minify("div { color: red; }"));
+        }
+
+        @Test
+        void handlesDescendantCombinator() {
+            assertEquals("div p{color:red}", CssMinifier.minify("div p { color: red; }"));
+        }
+
+        @Test
+        void handlesChildCombinator() {
+            assertEquals("div>p{color:red}", CssMinifier.minify("div > p { color: red; }"));
+        }
+
+        @Test
+        void handlesAdjacentSiblingCombinator() {
+            assertEquals("h1+p{color:red}", CssMinifier.minify("h1 + p { color: red; }"));
+        }
+
+        @Test
+        void handlesGeneralSiblingCombinator() {
+            assertEquals("h1~p{color:red}", CssMinifier.minify("h1 ~ p { color: red; }"));
+        }
+
+        @Test
+        void handlesCommaSeparatedSelectors() {
+            assertEquals("h1,h2,h3{color:red}",
+                CssMinifier.minify("h1, h2, h3 { color: red; }"));
+        }
+
+        @Test
+        void handlesCompoundSelector() {
+            assertEquals("div.foo#bar{color:red}",
+                CssMinifier.minify("div.foo#bar { color: red; }"));
+        }
+
+        @Test
+        void handlesPseudoClass() {
+            assertEquals("a:hover{color:red}", CssMinifier.minify("a:hover { color: red; }"));
+        }
+
+        @Test
+        void handlesPseudoClassWithParens() {
+            assertEquals("li:nth-child(2n+1){color:red}",
+                CssMinifier.minify("li:nth-child(2n+1) { color: red; }"));
+        }
+
+        @Test
+        void handlesPseudoElement() {
+            assertEquals("a::before{content:\"\"}",
+                CssMinifier.minify("a::before { content: \"\"; }"));
+        }
+
+        @Test
+        void handlesAttributeSelector() {
+            assertEquals("input[type=\"text\"]{color:red}",
+                CssMinifier.minify("input[type=\"text\"] { color: red; }"));
+        }
+
+        @Test
+        void handlesAttributeSelectorWithoutQuotes() {
+            assertEquals("input[type=text]{color:red}",
+                CssMinifier.minify("input[type=text] { color: red; }"));
+        }
+
+        @Test
+        void handlesAttributeSelectorContains() {
+            assertEquals("a[href*=\"example\"]{color:red}",
+                CssMinifier.minify("a[href*=\"example\"] { color: red; }"));
+        }
+
+        @Test
+        void handlesComplexSelector() {
+            assertEquals("div.container>ul.nav li.active a:hover{color:red}",
+                CssMinifier.minify("div.container > ul.nav li.active a:hover { color: red; }"));
+        }
+
+        @Test
+        void handlesMultipleSelectorsMultiline() {
+            String input = """
+                    h1,
+                    h2,
+                    h3 {
+                        color: red;
+                    }
+                    """;
+            assertEquals("h1,h2,h3{color:red}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesNotPseudoClass() {
+            assertEquals("p:not(.special){color:red}",
+                CssMinifier.minify("p:not(.special) { color: red; }"));
+        }
+    }
+
+    // ==================== AT-RULES ====================
+
+    @Nested
+    class AtRules {
+
+        @Test
+        void handlesMediaQuery() {
+            String input = """
+                    @media (max-width: 768px) {
+                        body {
+                            font-size: 14px;
+                        }
+                    }
+                    """;
+            assertEquals("@media (max-width:768px){body{font-size:14px}}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesMediaQueryWithType() {
+            String input = """
+                    @media screen and (min-width: 600px) {
+                        body {
+                            font-size: 16px;
+                        }
+                    }
+                    """;
+            assertEquals("@media screen and (min-width:600px){body{font-size:16px}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesKeyframes() {
+            String input = """
+                    @keyframes fadeIn {
+                        from {
+                            opacity: 0;
+                        }
+                        to {
+                            opacity: 1;
+                        }
+                    }
+                    """;
+            assertEquals("@keyframes fadeIn{from{opacity:0}to{opacity:1}}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesKeyframesWithPercentages() {
+            String input = """
+                    @keyframes slide {
+                        0% {
+                            transform: translateX(0);
+                        }
+                        50% {
+                            transform: translateX(100px);
+                        }
+                        100% {
+                            transform: translateX(0);
+                        }
+                    }
+                    """;
+            assertEquals(
+                "@keyframes slide{0%{transform:translateX(0)}50%{transform:translateX(100px)}100%{transform:translateX(0)}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesFontFace() {
+            String input = """
+                    @font-face {
+                        font-family: "MyFont";
+                        src: url("font.woff2") format("woff2");
+                    }
+                    """;
+            assertEquals("@font-face{font-family:\"MyFont\";src:url(\"font.woff2\") format(\"woff2\")}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesImport() {
+            assertEquals("@import url(\"style.css\");",
+                CssMinifier.minify("@import url(\"style.css\");"));
+        }
+
+        @Test
+        void handlesCharset() {
+            assertEquals("@charset \"UTF-8\";", CssMinifier.minify("@charset \"UTF-8\";"));
+        }
+
+        @Test
+        void handlesSupports() {
+            String input = """
+                    @supports (display: grid) {
+                        .container {
+                            display: grid;
+                        }
+                    }
+                    """;
+            assertEquals("@supports (display:grid){.container{display:grid}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesNestedMediaQueries() {
+            String input = """
+                    @media screen {
+                        @media (min-width: 600px) {
+                            body {
+                                font-size: 16px;
+                            }
+                        }
+                    }
+                    """;
+            assertEquals("@media screen{@media (min-width:600px){body{font-size:16px}}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesMediaQueryWithMultipleRules() {
+            String input = """
+                    @media print {
+                        body {
+                            font-size: 12pt;
+                        }
+                        .no-print {
+                            display: none;
+                        }
+                    }
+                    """;
+            assertEquals("@media print{body{font-size:12pt}.no-print{display:none}}",
+                CssMinifier.minify(input));
+        }
+    }
+
+    // ==================== PROPERTY VALUES ====================
+
+    @Nested
+    class PropertyValues {
+
+        @Test
+        void handlesImportant() {
+            assertEquals("a{color:red !important}",
+                CssMinifier.minify("a { color: red !important; }"));
+        }
+
+        @Test
+        void handlesNegativeValues() {
+            assertEquals("a{margin:-10px}", CssMinifier.minify("a { margin: -10px; }"));
+        }
+
+        @Test
+        void handlesDecimalValues() {
+            assertEquals("a{opacity:0.5}", CssMinifier.minify("a { opacity: 0.5; }"));
+        }
+
+        @Test
+        void handlesZeroValue() {
+            assertEquals("a{margin:0}", CssMinifier.minify("a { margin: 0; }"));
+        }
+
+        @Test
+        void handlesCalc() {
+            assertEquals("a{width:calc(100% - 20px)}",
+                CssMinifier.minify("a { width: calc(100% - 20px); }"));
+        }
+
+        @Test
+        void handlesCssVariables() {
+            assertEquals("a{color:var(--main-color)}",
+                CssMinifier.minify("a { color: var(--main-color); }"));
+        }
+
+        @Test
+        void handlesCssVariableWithFallback() {
+            assertEquals("a{color:var(--main-color,blue)}",
+                CssMinifier.minify("a { color: var(--main-color, blue); }"));
+        }
+
+        @Test
+        void handlesCssCustomPropertyDefinition() {
+            assertEquals(":root{--main-color:#06c}",
+                CssMinifier.minify(":root { --main-color: #06c; }"));
+        }
+
+        @Test
+        void handlesUrl() {
+            assertEquals("a{background:url(image.png)}",
+                CssMinifier.minify("a { background: url(image.png); }"));
+        }
+
+        @Test
+        void handlesUrlWithQuotes() {
+            assertEquals("a{background:url(\"image.png\")}",
+                CssMinifier.minify("a { background: url(\"image.png\"); }"));
+        }
+
+        @Test
+        void handlesMultipleBackgroundValues() {
+            assertEquals("a{background:url(bg.png) no-repeat center center}",
+                CssMinifier.minify("a { background: url(bg.png) no-repeat center center; }"));
+        }
+
+        @Test
+        void handlesRgbColor() {
+            assertEquals("a{color:rgb(255,0,0)}",
+                CssMinifier.minify("a { color: rgb(255, 0, 0); }"));
+        }
+
+        @Test
+        void handlesRgbaColor() {
+            assertEquals("a{color:rgba(255,0,0,0.5)}",
+                CssMinifier.minify("a { color: rgba(255, 0, 0, 0.5); }"));
+        }
+
+        @Test
+        void handlesHexColor() {
+            assertEquals("a{color:#ff0000}", CssMinifier.minify("a { color: #ff0000; }"));
+        }
+
+        @Test
+        void handlesTransform() {
+            assertEquals("a{transform:rotate(45deg) scale(1.5)}",
+                CssMinifier.minify("a { transform: rotate(45deg) scale(1.5); }"));
+        }
+
+        @Test
+        void handlesTransition() {
+            assertEquals("a{transition:all 0.3s ease-in-out}",
+                CssMinifier.minify("a { transition: all 0.3s ease-in-out; }"));
+        }
+
+        @Test
+        void handlesBoxShadow() {
+            assertEquals("a{box-shadow:0 2px 4px rgba(0,0,0,0.1)}",
+                CssMinifier.minify("a { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }"));
+        }
+
+        @Test
+        void handlesGradient() {
+            assertEquals("a{background:linear-gradient(to right,red,blue)}",
+                CssMinifier.minify("a { background: linear-gradient(to right, red, blue); }"));
+        }
+
+        @Test
+        void handlesMultipleValuesWithCommas() {
+            assertEquals("a{font-family:Arial,Helvetica,sans-serif}",
+                CssMinifier.minify("a { font-family: Arial, Helvetica, sans-serif; }"));
+        }
+
+        @Test
+        void handlesGridTemplate() {
+            assertEquals("a{grid-template-columns:1fr 2fr 1fr}",
+                CssMinifier.minify("a { grid-template-columns: 1fr 2fr 1fr; }"));
+        }
+    }
+
+    // ==================== MULTIPLE RULES ====================
+
+    @Nested
+    class MultipleRules {
+
+        @Test
+        void handlesTwoRules() {
+            String input = """
+                    h1 {
+                        font-size: 24px;
+                    }
+                    h2 {
+                        font-size: 18px;
+                    }
+                    """;
+            assertEquals("h1{font-size:24px}h2{font-size:18px}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesManyRules() {
+            String input = """
+                    a { color: red; }
+                    b { color: blue; }
+                    c { color: green; }
+                    d { color: yellow; }
+                    e { color: purple; }
+                    """;
+            assertEquals("a{color:red}b{color:blue}c{color:green}d{color:yellow}e{color:purple}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesRulesWithMultipleProperties() {
+            String input = """
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        font-family: sans-serif;
+                        line-height: 1.5;
+                    }
+                    """;
+            assertEquals("body{margin:0;padding:0;font-family:sans-serif;line-height:1.5}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesRulesWithNoSpaceBetween() {
+            assertEquals("a{color:red}b{color:blue}",
+                CssMinifier.minify("a{color:red}b{color:blue}"));
+        }
+    }
+
+    // ==================== EDGE CASES ====================
+
+    @Nested
+    class EdgeCases {
+
+        @Test
+        void handlesEmptyInput() {
+            assertEquals("", CssMinifier.minify(""));
+        }
+
+        @Test
+        void handlesOnlySpaces() {
+            assertEquals("", CssMinifier.minify("     "));
+        }
+
+        @Test
+        void handlesOnlyNewlines() {
+            assertEquals("", CssMinifier.minify("\n\n\n"));
+        }
+
+        @Test
+        void handlesEmptyRuleBody() {
+            assertEquals("a{}", CssMinifier.minify("a { }"));
+        }
+
+        @Test
+        void handlesAlreadyMinified() {
+            String input = "a{color:red}b{font-size:12px}";
+            assertEquals(input, CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesSingleCharacterInput() {
+            assertEquals("a", CssMinifier.minify("a"));
+        }
+
+        @Test
+        void handlesSingleProperty() {
+            assertEquals("a{color:red}", CssMinifier.minify("a{color:red}"));
+        }
+
+        @Test
+        void handlesUnicodeContent() {
+            assertEquals("a{content:\"\u2603\"}",
+                CssMinifier.minify("a { content: \"\u2603\"; }"));
+        }
+
+        @Test
+        void handlesUnicodeSelector() {
+            assertEquals(".caf\u00e9{color:red}",
+                CssMinifier.minify(".caf\u00e9 { color: red; }"));
+        }
+
+        @Test
+        void handlesDataUri() {
+            String input = "a { background: url(\"data:image/png;base64,iVBOR\"); }";
+            assertEquals("a{background:url(\"data:image/png;base64,iVBOR\")}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesSingleLineInput() {
+            assertEquals("a{color:red}",
+                CssMinifier.minify("a { color: red; }"));
+        }
+
+        @Test
+        void handlesNoSemicolonLastProperty() {
+            assertEquals("a{color:red;font-size:12px}",
+                CssMinifier.minify("a { color: red; font-size: 12px }"));
+        }
+
+        @Test
+        void idempotent() {
+            String input = """
+                    body {
+                        margin: 0;
+                        padding: 0;
+                    }
+                    a {
+                        color: blue;
+                        text-decoration: none;
+                    }
+                    """;
+            String once = CssMinifier.minify(input);
+            String twice = CssMinifier.minify(once);
+            assertEquals(once, twice);
+        }
+
+        @Test
+        void idempotentWithComments() {
+            String input = "/* comment */ a { /* color */ color: red; }";
+            String once = CssMinifier.minify(input);
+            String twice = CssMinifier.minify(once);
+            assertEquals(once, twice);
+        }
+
+        @Test
+        void idempotentWithStrings() {
+            String input = "a { content: \"  hello  \"; }";
+            String once = CssMinifier.minify(input);
+            String twice = CssMinifier.minify(once);
+            assertEquals(once, twice);
+        }
+    }
+
+    // ==================== REAL-WORLD CSS ====================
+
+    @Nested
+    class RealWorldCss {
+
+        @Test
+        void handlesSimpleReset() {
+            String input = """
+                    /* CSS Reset */
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    """;
+            assertEquals("*{margin:0;padding:0;box-sizing:border-box}", CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesTypicalPageLayout() {
+            String input = """
+                    .container {
+                        max-width: 1200px;
+                        margin: 0 auto;
+                        padding: 0 20px;
+                    }
+
+                    .header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 20px 0;
+                    }
+
+                    .nav a {
+                        text-decoration: none;
+                        color: #333;
+                        margin-left: 20px;
+                    }
+                    """;
+            assertEquals(
+                ".container{max-width:1200px;margin:0 auto;padding:0 20px}" +
+                ".header{display:flex;justify-content:space-between;align-items:center;padding:20px 0}" +
+                ".nav a{text-decoration:none;color:#333;margin-left:20px}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesResponsiveDesign() {
+            String input = """
+                    .grid {
+                        display: grid;
+                        grid-template-columns: repeat(3, 1fr);
+                        gap: 20px;
+                    }
+
+                    @media (max-width: 768px) {
+                        .grid {
+                            grid-template-columns: 1fr;
+                        }
+                    }
+                    """;
+            assertEquals(
+                ".grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}" +
+                "@media (max-width:768px){.grid{grid-template-columns:1fr}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesButtonStyles() {
+            String input = """
+                    .btn {
+                        display: inline-block;
+                        padding: 10px 20px;
+                        border: none;
+                        border-radius: 4px;
+                        background-color: #007bff;
+                        color: #fff;
+                        cursor: pointer;
+                        transition: background-color 0.3s ease;
+                    }
+
+                    .btn:hover {
+                        background-color: #0056b3;
+                    }
+
+                    .btn:active {
+                        transform: translateY(1px);
+                    }
+                    """;
+            assertEquals(
+                ".btn{display:inline-block;padding:10px 20px;border:none;border-radius:4px;" +
+                "background-color:#007bff;color:#fff;cursor:pointer;transition:background-color 0.3s ease}" +
+                ".btn:hover{background-color:#0056b3}" +
+                ".btn:active{transform:translateY(1px)}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesAnimationDefinition() {
+            String input = """
+                    .spinner {
+                        width: 40px;
+                        height: 40px;
+                        border: 4px solid #f3f3f3;
+                        border-top: 4px solid #3498db;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                    }
+
+                    @keyframes spin {
+                        0% {
+                            transform: rotate(0deg);
+                        }
+                        100% {
+                            transform: rotate(360deg);
+                        }
+                    }
+                    """;
+            assertEquals(
+                ".spinner{width:40px;height:40px;border:4px solid #f3f3f3;" +
+                "border-top:4px solid #3498db;border-radius:50%;animation:spin 1s linear infinite}" +
+                "@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesFormStyles() {
+            String input = """
+                    input[type="text"],
+                    input[type="email"],
+                    textarea {
+                        width: 100%;
+                        padding: 8px 12px;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        font-size: 14px;
+                    }
+
+                    input[type="text"]:focus,
+                    input[type="email"]:focus,
+                    textarea:focus {
+                        outline: none;
+                        border-color: #007bff;
+                        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+                    }
+                    """;
+            assertEquals(
+                "input[type=\"text\"],input[type=\"email\"],textarea" +
+                "{width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:4px;font-size:14px}" +
+                "input[type=\"text\"]:focus,input[type=\"email\"]:focus,textarea:focus" +
+                "{outline:none;border-color:#007bff;box-shadow:0 0 0 3px rgba(0,123,255,0.25)}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesFlexboxLayout() {
+            String input = """
+                    .card-container {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 16px;
+                    }
+
+                    .card {
+                        flex: 1 1 300px;
+                        padding: 16px;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    }
+
+                    .card > h3 {
+                        margin-bottom: 8px;
+                        font-size: 18px;
+                    }
+                    """;
+            assertEquals(
+                ".card-container{display:flex;flex-wrap:wrap;gap:16px}" +
+                ".card{flex:1 1 300px;padding:16px;border:1px solid #e0e0e0;border-radius:8px;" +
+                "box-shadow:0 2px 4px rgba(0,0,0,0.1)}" +
+                ".card>h3{margin-bottom:8px;font-size:18px}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesHeavilyCommentedCss() {
+            String input = """
+                    /**
+                     * Main Stylesheet
+                     * Author: Test
+                     * Version: 1.0
+                     */
+
+                    /* ==================
+                       Base Styles
+                       ================== */
+
+                    body {
+                        /* Default font */
+                        font-family: sans-serif;
+                        /* Reset margin */
+                        margin: 0;
+                    }
+
+                    /* Links */
+                    a {
+                        color: blue; /* TODO: use variable */
+                    }
+                    """;
+            assertEquals(
+                "body{font-family:sans-serif;margin:0}a{color:blue}",
+                CssMinifier.minify(input));
+        }
+
+        @Test
+        void handlesCssWithCustomProperties() {
+            String input = """
+                    :root {
+                        --primary: #007bff;
+                        --secondary: #6c757d;
+                        --font-size-base: 16px;
+                        --line-height-base: 1.5;
+                    }
+
+                    body {
+                        font-size: var(--font-size-base);
+                        line-height: var(--line-height-base);
+                        color: var(--secondary);
+                    }
+
+                    a {
+                        color: var(--primary);
+                    }
+                    """;
+            assertEquals(
+                ":root{--primary:#007bff;--secondary:#6c757d;--font-size-base:16px;--line-height-base:1.5}" +
+                "body{font-size:var(--font-size-base);line-height:var(--line-height-base);color:var(--secondary)}" +
+                "a{color:var(--primary)}",
+                CssMinifier.minify(input));
+        }
+    }
+
+    // ==================== SIZE REDUCTION ====================
+
+    @Nested
+    class SizeReduction {
+
+        @Test
+        void outputIsSmallerOrEqualToInput() {
+            String input = """
+                    /* Styles */
+                    body {
+                        margin: 0;
+                        padding: 0;
+                    }
+
+                    h1 {
+                        font-size: 2em;
+                        color: #333;
+                    }
+                    """;
+            String output = CssMinifier.minify(input);
+            assertTrue(output.length() <= input.length(),
+                "Minified output should not be larger than input");
+        }
+
+        @Test
+        void significantlyReducesWellFormattedCss() {
+            String input = """
+                    /**
+                     * Component styles
+                     */
+
+                    .component {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 20px;
+                        margin: 10px 0;
+                        background-color: #f5f5f5;
+                        border: 1px solid #ddd;
+                        border-radius: 8px;
+                    }
+
+                    .component__title {
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: #333;
+                        margin-bottom: 16px;
+                    }
+
+                    .component__body {
+                        font-size: 14px;
+                        line-height: 1.6;
+                        color: #666;
+                    }
+                    """;
+            String output = CssMinifier.minify(input);
+            double ratio = (double) output.length() / input.length();
+            assertTrue(ratio < 0.7,
+                "Expected >30%% reduction but got " + String.format("%.1f%%", (1 - ratio) * 100));
+        }
+
+        @Test
+        void minifiedOutputProducesNoEmptyLines() {
+            String input = """
+                    body {
+                        color: red;
+                    }
+
+
+
+                    a {
+                        color: blue;
+                    }
+                    """;
+            String output = CssMinifier.minify(input);
+            assertFalse(output.contains("\n"), "Minified output should contain no newlines");
+        }
+    }
+}
