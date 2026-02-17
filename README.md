@@ -2,7 +2,7 @@
 
 A single-file CSS minifier in Java. No dependencies, no configuration — just correct, competitive minification.
 
-**814 lines of code. 399 tests. Beats official minifiers on 6 of 8 major frameworks.**
+**883 lines of code. 416 tests. Beats official minifiers on 6 of 8 major frameworks.**
 
 ## Benchmark
 
@@ -14,9 +14,9 @@ Tested against officially distributed minified versions (cssnano, clean-css, etc
 | Bootstrap | 281 KB | 232 KB | 233 KB | **-0.26%** |
 | Bulma | 764 KB | 679 KB | 678 KB | +0.22% |
 | Foundation | 161 KB | 131 KB | 131 KB | **-0.26%** |
-| Materialize | 179 KB | 140 KB | 142 KB | **-1.58%** |
+| Materialize | 179 KB | 140 KB | 142 KB | **-1.43%** |
 | PrimeFlex | 433 KB | 350 KB | 361 KB | **-3.09%** |
-| Semantic UI | 752 KB | 563 KB | 564 KB | **-0.17%** |
+| Semantic UI | 752 KB | 563 KB | 564 KB | **-0.14%** |
 | Tailwind | 3,642 KB | 2,910 KB | 2,934 KB | **-0.81%** |
 
 Negative = our output is smaller than official.
@@ -75,15 +75,19 @@ stripComments → collapseWhitespace → optimizeValues → optimizeQuotedTokens
 | URL quotes | `url("file.png")` → `url(file.png)` |
 | Calc whitespace | `calc(100% * 2)` → `calc(100%*2)` |
 | Margin/padding shorthand | Four longhands → shorthand |
-| Duplicate properties | Removes duplicates, preserves vendor fallback chains |
+| Duplicate properties | Removes duplicates, preserves vendor fallback chains and `src` |
 | Adjacent rule merging | `a{x:1} a{y:2}` → `a{x:1;y:2}` |
 | Trailing semicolons | `{color:red;}` → `{color:red}` |
 
 ### Safety features
 
 - Preserves `/*! license */` comments
-- Preserves vendor-prefix fallback chains (`-webkit-`, `-moz-`, `-ms-`)
+- Preserves vendor-prefix fallback chains (`-webkit-`, `-moz-`, `-ms-`) in both values and property names
 - Preserves modern CSS function fallbacks (`calc()`, `var()`, `min()`, `max()`, `clamp()`, `env()`)
+- Preserves multiple `src` declarations in `@font-face` (IE9 fallback pattern)
+- Preserves quotes on URLs containing semicolons (data URIs)
+- Correctly handles escaped backslashes in strings (`content: "test\\"`)
+- String-aware semicolon splitting (semicolons inside strings don't break parsing)
 - Preserves spaces around `+` and `-` in `calc()`
 - Preserves pseudo-class descendant spaces (`.parent :hover` vs `.parent:hover`)
 - Preserves units in custom property declarations (`--gap: 0%` stays `--gap:0%`)
@@ -94,4 +98,4 @@ stripComments → collapseWhitespace → optimizeValues → optimizeQuotedTokens
 mvn test
 ```
 
-399 tests covering comments, whitespace, selectors, at-rules, property values, strings, hex colors, zero units, font-weight, shorthand collapse, leading zeros, license comments, pseudo-class spacing, calc spacing, duplicate removal, vendor fallbacks, rule merging, keyframes, transforms, background/outline, attribute selectors, URL quotes, calc whitespace, custom properties, and real-world CSS patterns.
+416 tests covering comments, whitespace, selectors, at-rules, property values, strings, hex colors, zero units, font-weight, shorthand collapse, leading zeros, license comments, pseudo-class spacing, calc spacing, duplicate removal, vendor fallbacks, rule merging, keyframes, transforms, background/outline, attribute selectors, URL quotes, calc whitespace, custom properties, escaped backslashes, semicolons in strings, CSS identifier validation, font-face src dedup, vendor property name pairing, and real-world CSS patterns.
