@@ -10,6 +10,36 @@ import java.util.regex.Pattern;
 
 public class CssMinifier {
 
+    private static boolean isEscaped(String s, int pos) {
+        int backslashes = 0;
+        for (int k = pos - 1; k >= 0 && s.charAt(k) == '\\'; k--) backslashes++;
+        return (backslashes % 2) != 0;
+    }
+
+    private static java.util.List<String> splitDeclarations(String block) {
+        java.util.List<String> result = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inString = false;
+        char stringChar = 0;
+        for (int i = 0; i < block.length(); i++) {
+            char c = block.charAt(i);
+            if (inString) {
+                current.append(c);
+                if (c == stringChar && !isEscaped(block, i)) inString = false;
+                continue;
+            }
+            if (c == '"' || c == '\'') { inString = true; stringChar = c; }
+            if (c == ';' && !inString) {
+                result.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        if (current.length() > 0) result.add(current.toString());
+        return result;
+    }
+
     public static String minify(String css) {
         String result = stripComments(css);
         result = collapseWhitespace(result);
@@ -55,7 +85,7 @@ public class CssMinifier {
 
             if (inString) {
                 result.append(c);
-                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                 }
                 continue;
@@ -99,7 +129,7 @@ public class CssMinifier {
 
             if (inString) {
                 result.append(c);
-                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                 }
                 continue;
@@ -164,6 +194,9 @@ public class CssMinifier {
         "font-weight:(normal|bold)(?=[;}\"])");
 
     // 6. Keyframe from → 0%, 100% → to (only in keyframe context: preceded by { or })
+    // NOTE: These patterns could theoretically match a `from` element selector directly
+    // after `}` with no class/id prefix, but this never occurs in practice. A proper fix
+    // would require structural keyframe-context parsing.
     private static final Pattern KEYFRAME_FROM = Pattern.compile(
         "(?<=[{}])from(?=\\s*[{,])");
     private static final Pattern KEYFRAME_100 = Pattern.compile(
@@ -203,7 +236,7 @@ public class CssMinifier {
             char c = css.charAt(i);
 
             if (inString) {
-                if (c == stringChar && css.charAt(i - 1) != '\\') {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                     // Append string verbatim (including closing quote)
                     result.append(css, segmentStart, i + 1);
@@ -348,7 +381,7 @@ public class CssMinifier {
 
             if (inString) {
                 result.append(c);
-                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                 }
                 i++;
@@ -365,7 +398,8 @@ public class CssMinifier {
                         if (closeQ > 0 && closeQ + 1 < css.length() && css.charAt(closeQ + 1) == ')') {
                             String content = css.substring(qPos + 1, closeQ);
                             if (!content.isEmpty() && content.indexOf(' ') < 0
-                                    && content.indexOf('(') < 0 && content.indexOf(')') < 0) {
+                                    && content.indexOf('(') < 0 && content.indexOf(')') < 0
+                                    && content.indexOf(';') < 0) {
                                 result.append("url(").append(content).append(')');
                                 i = closeQ + 2;
                                 continue;
@@ -419,6 +453,11 @@ public class CssMinifier {
         if (value.isEmpty()) return false;
         char first = value.charAt(0);
         if (!Character.isLetter(first) && first != '_' && first != '-') return false;
+        if (first == '-') {
+            if (value.length() < 2) return false;
+            char second = value.charAt(1);
+            if (!Character.isLetter(second) && second != '_' && second != '-') return false;
+        }
         for (int k = 1; k < value.length(); k++) {
             char ch = value.charAt(k);
             if (!Character.isLetterOrDigit(ch) && ch != '_' && ch != '-') return false;
@@ -439,7 +478,7 @@ public class CssMinifier {
 
             if (inString) {
                 result.append(c);
-                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                 }
                 i++;
@@ -463,7 +502,7 @@ public class CssMinifier {
                 while (j < css.length() && braceDepth > 0) {
                     char bc = css.charAt(j);
                     if (blockInString) {
-                        if (bc == blockStringChar && css.charAt(j - 1) != '\\') {
+                        if (bc == blockStringChar && !isEscaped(css, j)) {
                             blockInString = false;
                         }
                     } else if (bc == '"' || bc == '\'') {
@@ -502,14 +541,20 @@ public class CssMinifier {
     }
 
     private static String collapseBlock(String block, String property) {
+        java.util.List<String> declarations = splitDeclarations(block);
         Map<String, String> sideValues = new LinkedHashMap<>();
+        java.util.Set<String> sideProps = new java.util.HashSet<>();
         for (String side : SIDES) {
-            String prop = property + "-" + side;
-            // Match property-side:value (value runs to ; or end of block)
-            Pattern p = Pattern.compile("(?:^|;)" + Pattern.quote(prop) + ":([^;]+)");
-            Matcher m = p.matcher(block);
-            if (m.find()) {
-                sideValues.put(side, m.group(1).trim());
+            sideProps.add(property + "-" + side);
+        }
+
+        for (String decl : declarations) {
+            int colon = decl.indexOf(':');
+            if (colon <= 0) continue;
+            String prop = decl.substring(0, colon);
+            if (sideProps.contains(prop)) {
+                String side = prop.substring(property.length() + 1);
+                sideValues.put(side, decl.substring(colon + 1).trim());
             }
         }
 
@@ -534,24 +579,23 @@ public class CssMinifier {
             shorthand = top + " " + right + " " + bottom + " " + left;
         }
 
-        // Remove the 4 longhand declarations
-        for (String side : SIDES) {
-            String prop = property + "-" + side;
-            block = block.replaceFirst("(?:;|^)" + Pattern.quote(prop) + ":[^;]+", "");
-        }
-        // Clean up leading semicolons
-        if (block.startsWith(";")) {
-            block = block.substring(1);
+        // Rebuild block without the 4 longhand declarations, then append shorthand
+        StringBuilder sb = new StringBuilder();
+        for (String decl : declarations) {
+            int colon = decl.indexOf(':');
+            if (colon > 0 && sideProps.contains(decl.substring(0, colon))) continue;
+            if (decl.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(';');
+            sb.append(decl);
         }
 
-        // Append shorthand
-        if (!block.isEmpty()) {
-            block = block + ";" + property + ":" + shorthand;
+        if (sb.length() > 0) {
+            sb.append(';').append(property).append(':').append(shorthand);
         } else {
-            block = property + ":" + shorthand;
+            sb.append(property).append(':').append(shorthand);
         }
 
-        return block;
+        return sb.toString();
     }
 
     static String removeDuplicateProperties(String css) {
@@ -565,7 +609,7 @@ public class CssMinifier {
 
             if (inString) {
                 result.append(c);
-                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                 }
                 i++;
@@ -588,7 +632,7 @@ public class CssMinifier {
                 while (j < css.length() && braceDepth > 0) {
                     char bc = css.charAt(j);
                     if (bInString) {
-                        if (bc == bStringChar && css.charAt(j - 1) != '\\') bInString = false;
+                        if (bc == bStringChar && !isEscaped(css, j)) bInString = false;
                     } else if (bc == '"' || bc == '\'') {
                         bInString = true;
                         bStringChar = bc;
@@ -636,12 +680,12 @@ public class CssMinifier {
     private static String deduplicateBlock(String block) {
         if (block.isEmpty()) return block;
 
-        String[] declarations = block.split(";");
+        java.util.List<String> declarations = splitDeclarations(block);
 
         // Group declaration indices by property name
         LinkedHashMap<String, java.util.List<Integer>> propIndices = new LinkedHashMap<>();
-        for (int i = 0; i < declarations.length; i++) {
-            String decl = declarations[i];
+        for (int i = 0; i < declarations.size(); i++) {
+            String decl = declarations.get(i);
             int colon = decl.indexOf(':');
             if (colon > 0) {
                 String prop = decl.substring(0, colon);
@@ -656,12 +700,37 @@ public class CssMinifier {
             java.util.List<Integer> indices = entry.getValue();
             if (indices.size() <= 1) continue;
 
+            String propName = entry.getKey();
+
             boolean isFallbackChain = false;
             for (int idx : indices) {
-                String value = declarations[idx].substring(declarations[idx].indexOf(':') + 1);
+                String value = declarations.get(idx).substring(declarations.get(idx).indexOf(':') + 1);
                 if (hasVendorPrefix(value) || hasModernCssFunction(value)) {
                     isFallbackChain = true;
                     break;
+                }
+            }
+
+            // Fix 5: Never deduplicate 'src' — multiple src declarations are standard in @font-face
+            if (propName.equals("src")) {
+                isFallbackChain = true;
+            }
+
+            // Fix 6: Check if property name itself is vendor-prefixed
+            if (!isFallbackChain) {
+                if (propName.startsWith("-webkit-") || propName.startsWith("-moz-")
+                        || propName.startsWith("-ms-") || propName.startsWith("-o-")) {
+                    isFallbackChain = true;
+                }
+            }
+
+            // Fix 6: Check if a vendor-prefixed counterpart exists in the block
+            if (!isFallbackChain) {
+                if (propIndices.containsKey("-webkit-" + propName)
+                        || propIndices.containsKey("-moz-" + propName)
+                        || propIndices.containsKey("-ms-" + propName)
+                        || propIndices.containsKey("-o-" + propName)) {
+                    isFallbackChain = true;
                 }
             }
 
@@ -674,10 +743,10 @@ public class CssMinifier {
         }
 
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < declarations.length; i++) {
-            if (declarations[i].isEmpty() || toRemove.contains(i)) continue;
+        for (int i = 0; i < declarations.size(); i++) {
+            if (declarations.get(i).isEmpty() || toRemove.contains(i)) continue;
             if (sb.length() > 0) sb.append(';');
-            sb.append(declarations[i]);
+            sb.append(declarations.get(i));
         }
         return sb.toString();
     }
@@ -696,7 +765,7 @@ public class CssMinifier {
 
             if (inString) {
                 result.append(c);
-                if (c == stringChar && (i == 0 || css.charAt(i - 1) != '\\')) {
+                if (c == stringChar && !isEscaped(css, i)) {
                     inString = false;
                 }
                 i++;
@@ -720,7 +789,7 @@ public class CssMinifier {
                 while (j < css.length() && braceDepth > 0) {
                     char bc = css.charAt(j);
                     if (bInString) {
-                        if (bc == bStringChar && css.charAt(j - 1) != '\\') bInString = false;
+                        if (bc == bStringChar && !isEscaped(css, j)) bInString = false;
                     } else if (bc == '"' || bc == '\'') {
                         bInString = true;
                         bStringChar = bc;

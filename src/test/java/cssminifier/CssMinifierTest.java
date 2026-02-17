@@ -879,8 +879,9 @@ class CssMinifierTest {
 
         @Test
         void handlesDataUri() {
+            // Data URIs with semicolons must preserve quotes to avoid breaking downstream splitting
             String input = "a { background: url(\"data:image/png;base64,iVBOR\"); }";
-            assertEquals("a{background:url(data:image/png;base64,iVBOR)}", CssMinifier.minify(input));
+            assertEquals("a{background:url(\"data:image/png;base64,iVBOR\")}", CssMinifier.minify(input));
         }
 
         @Test
@@ -2886,8 +2887,9 @@ class CssMinifierTest {
         }
 
         @Test
-        void removesQuotesFromDataUri() {
-            assertEquals("a{background:url(data:image/png;base64,abc123)}",
+        void preservesQuotesForDataUriWithSemicolon() {
+            // Data URIs with semicolons must preserve quotes to avoid breaking downstream splitting
+            assertEquals("a{background:url(\"data:image/png;base64,abc123\")}",
                 CssMinifier.minify("a { background: url(\"data:image/png;base64,abc123\"); }"));
         }
 
@@ -2907,6 +2909,184 @@ class CssMinifierTest {
         void removesQuotesFromFontFaceSrc() {
             assertEquals("@font-face{src:url(font.woff2) format(woff2)}",
                 CssMinifier.minify("@font-face { src: url(\"font.woff2\") format(woff2); }"));
+        }
+    }
+
+    // ==================== ESCAPED BACKSLASH ====================
+
+    @Nested
+    class EscapedBackslash {
+
+        @Test
+        void handlesDoubleEscapedBackslashInString() {
+            // "test\\" — the \\\\ is an escaped backslash, the quote IS the end of the string
+            String input = "a { content: \"test\\\\\"; color: red; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("content:\"test\\\\\""), "Should preserve escaped backslash in string");
+            assertTrue(result.contains("color:red"), "Should still process color after string ends");
+        }
+
+        @Test
+        void handlesPathWithEscapedBackslashes() {
+            // "path\\\\file" — two escaped backslashes
+            String input = "a { content: \"path\\\\\\\\file\"; color: blue; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("content:\"path\\\\\\\\file\""), "Should preserve escaped backslashes");
+            assertTrue(result.contains("color:blue"), "Should process property after string");
+        }
+
+        @Test
+        void handlesEscapedQuoteInString() {
+            // "say \\\"hello\\\"" — escaped quotes inside string
+            String input = "a { content: \"say \\\"hello\\\"\"; color: green; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("color:green"), "Should process property after string with escaped quotes");
+        }
+    }
+
+    // ==================== SEMICOLONS IN STRINGS ====================
+
+    @Nested
+    class SemicolonsInStrings {
+
+        @Test
+        void preservesSemicolonInContentString() {
+            String input = "a { content: \"hello; world\"; color: red; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("content:\"hello; world\""), "Should preserve semicolon inside string");
+            assertTrue(result.contains("color:red"), "Should keep color property");
+        }
+
+        @Test
+        void deduplicatesCorrectlyWithSemicolonInString() {
+            // The semicolon in the string shouldn't cause incorrect splitting
+            String input = "a { content: \"a;b\"; content: \"c;d\"; }";
+            String result = CssMinifier.minify(input);
+            assertEquals("a{content:\"c;d\"}", result);
+        }
+
+        @Test
+        void preservesDataUriWithSemicolon() {
+            String input = "a { background: url(\"data:image/svg+xml;charset=utf-8,abc\"); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("url(\"data:image/svg+xml;charset=utf-8,abc\")"),
+                "Should preserve quotes around data URI with semicolon");
+        }
+    }
+
+    // ==================== CSS IDENTIFIER VALIDATION ====================
+
+    @Nested
+    class CssIdentifierValidation {
+
+        @Test
+        void preservesQuotesForDashDigitIdentifier() {
+            // -1abc is not a valid CSS identifier — quotes must be kept
+            String input = "a[data-v=\"-1abc\"] { color: red; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("[data-v=\"-1abc\"]"), "Should preserve quotes for -digit identifier");
+        }
+
+        @Test
+        void removesQuotesForDashLetterIdentifier() {
+            // -abc is a valid CSS identifier — quotes can be removed
+            String input = "a[data-v=\"-abc\"] { color: red; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("[data-v=-abc]"), "Should remove quotes for valid -letter identifier");
+        }
+
+        @Test
+        void preservesQuotesForSingleDash() {
+            String input = "a[data-v=\"-\"] { color: red; }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("[data-v=\"-\"]"), "Should preserve quotes for single dash");
+        }
+    }
+
+    // ==================== URL SEMICOLONS ====================
+
+    @Nested
+    class UrlSemicolons {
+
+        @Test
+        void preservesQuotesWhenUrlContainsSemicolon() {
+            String input = "a { background: url(\"data:font/woff;charset=utf-8,abc\"); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("url(\"data:font/woff;charset=utf-8,abc\")"),
+                "Should preserve quotes around URL with semicolon");
+        }
+
+        @Test
+        void stillRemovesQuotesFromSimpleUrl() {
+            String input = "a { background: url(\"image.png\"); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("url(image.png)"), "Should still remove quotes from simple URL");
+        }
+    }
+
+    // ==================== FONT-FACE SRC DEDUP ====================
+
+    @Nested
+    class FontFaceSrcDedup {
+
+        @Test
+        void preservesMultipleSrcDeclarationsInFontFace() {
+            String input = "@font-face { src: url(x.eot); src: url(x.eot?#iefix) format('eot'); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("src:url(x.eot)"), "Should keep first src");
+            assertTrue(result.contains("src:url(x.eot?#iefix)"), "Should keep second src (IE9 fallback)");
+        }
+
+        @Test
+        void preservesMultipleSrcWithMultipleFormats() {
+            String input = "@font-face { src: url(f.eot); src: url(f.woff2) format('woff2'), url(f.woff) format('woff'); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("src:url(f.eot)"), "Should keep first src");
+            assertTrue(result.contains("src:url(f.woff2)"), "Should keep second src");
+        }
+    }
+
+    // ==================== VENDOR PROPERTY NAME PAIRING ====================
+
+    @Nested
+    class VendorPropertyNamePairing {
+
+        @Test
+        void preservesAllTransformsWithVendorPrefixedPropertyNames() {
+            String input = "a { -webkit-transform: translateX(10px); transform: translateX(10px); -webkit-transform: scale(2); transform: scale(2); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("-webkit-transform:translateX(10px)"), "Should keep first -webkit-transform");
+            assertTrue(result.contains("transform:translateX(10px)"), "Should keep first transform");
+            assertTrue(result.contains("-webkit-transform:scale(2)"), "Should keep second -webkit-transform");
+            assertTrue(result.contains("transform:scale(2)"), "Should keep second transform");
+        }
+
+        @Test
+        void preservesVendorPrefixedPropertyWithDuplicates() {
+            String input = "a { -webkit-transform: rotate(45deg); -webkit-transform: rotate(90deg); }";
+            String result = CssMinifier.minify(input);
+            assertTrue(result.contains("-webkit-transform:rotate(45deg)"), "Should keep first -webkit-transform");
+            assertTrue(result.contains("-webkit-transform:rotate(90deg)"), "Should keep second -webkit-transform");
+        }
+
+        @Test
+        void preservesTransformWhenVendorCounterpartExists() {
+            // transform should be kept even though values have no vendor prefix,
+            // because -webkit-transform also exists in the block
+            String input = "a { -webkit-transform: none; transform: none; -webkit-transform: scale(1); transform: scale(1); }";
+            String result = CssMinifier.minify(input);
+            // All four declarations should be preserved
+            int count = 0;
+            int idx = 0;
+            while ((idx = result.indexOf("transform:", idx)) != -1) { count++; idx++; }
+            assertTrue(count >= 4, "Should preserve all 4 transform declarations, found " + count);
+        }
+
+        @Test
+        void stillDeduplicatesPropertyWithoutVendorCounterpart() {
+            // No vendor-prefixed counterpart → safe to dedup
+            String input = "a { display: block; display: flex; }";
+            assertEquals("a{display:flex}", CssMinifier.minify(input));
         }
     }
 
